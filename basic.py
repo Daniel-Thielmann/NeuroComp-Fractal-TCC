@@ -2,7 +2,7 @@ from bcikit.datasets import PhysionetMI
 import numpy as np
 import matplotlib.pyplot as plt
 from bcikit.modules.core import set_global_verbose_eegdata
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import time
@@ -65,7 +65,6 @@ def euclidean_alignment(data):
     data = np.squeeze(data, axis=1)
 
     # Reorganiza os dados para (trials, amostras, canais) e calcula a covariância
-    # (trials, amostras, canais)
     data_reordered = np.transpose(data, (0, 2, 1))
 
     # Calcula a matriz de covariância média entre os canais
@@ -202,6 +201,51 @@ def compare_before_after(aligned_df, original_df):
     plt.show()
 
 
+def plot_lda_qda_comparison(X, y):
+    """
+    Gera um gráfico comparativo entre LDA e QDA usando os labels 1 e 2.
+    """
+    lda = LinearDiscriminantAnalysis()
+    qda = QuadraticDiscriminantAnalysis()
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.3, random_state=42)
+
+    # Ajuste do LDA e QDA
+    lda.fit(X_train, y_train)
+    qda.fit(X_train, y_train)
+
+    x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+    y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.linspace(x_min, x_max, 200),
+                         np.linspace(y_min, y_max, 200))
+
+    # Previsões para o LDA
+    Z_lda = lda.predict(np.c_[xx.ravel(), yy.ravel()])
+    Z_lda = Z_lda.reshape(xx.shape)
+
+    # Previsões para o QDA
+    Z_qda = qda.predict(np.c_[xx.ravel(), yy.ravel()])
+    Z_qda = Z_qda.reshape(xx.shape)
+
+    plt.figure(figsize=(12, 6))
+
+    # Plot do LDA
+    plt.subplot(1, 2, 1)
+    plt.contourf(xx, yy, Z_lda, alpha=0.8, cmap=plt.cm.coolwarm)
+    plt.scatter(X[:, 0], X[:, 1], c=y, edgecolor='k', cmap=plt.cm.coolwarm)
+    plt.title("Linear Discriminant Analysis")
+
+    # Plot do QDA
+    plt.subplot(1, 2, 2)
+    plt.contourf(xx, yy, Z_qda, alpha=0.8, cmap=plt.cm.coolwarm)
+    plt.scatter(X[:, 0], X[:, 1], c=y, edgecolor='k', cmap=plt.cm.coolwarm)
+    plt.title("Quadratic Discriminant Analysis")
+
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
     # Configura o nível de log
     set_global_verbose_eegdata("WARNING")
@@ -266,6 +310,13 @@ def main():
 
     # Compara os valores antes e depois do alinhamento
     compare_before_after(aligned_df_values, original_df_values)
+
+    # Gera o gráfico de comparação LDA vs QDA
+    mask = (phy.labels == 1) | (phy.labels == 2)  # Filtra labels 1 e 2
+    # Usa as duas primeiras dimensões para visualização
+    X_reduced = original_df_values[mask][:, :2]
+    y_reduced = phy.labels[mask]
+    plot_lda_qda_comparison(X_reduced, y_reduced)
 
 
 if __name__ == "__main__":
