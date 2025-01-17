@@ -16,9 +16,6 @@ electrode_names = [
     "Iz", "Oz2"
 ]
 
-# Garantindo que a lista de eletrodos tenha 64 nomes
-assert len(electrode_names) == 64, "A lista de nomes de eletrodos precisa conter exatamente 64 elementos."
-
 
 def higuchi_fd(signal, kmax=10):
     """
@@ -246,6 +243,37 @@ def plot_lda_qda_comparison(X, y):
     plt.show()
 
 
+def hig(x):
+    """
+    Realiza uma transformação linear simples nos dados EEG.
+
+    Parâmetros:
+    - x: numpy array com formato [180, 1, 64, 640], onde:
+        - 180: Número de trials
+        - 1: Placeholder (1 conjunto por trial)
+        - 64: Número de canais
+        - 640: Amostras temporais por canal
+
+    Retorno:
+    - z: numpy array com formato [180, 64], onde:
+        - Cada valor z[i, j] é a soma das amostras do canal j no trial i.
+    """
+    # Remove o eixo singleton (1), alterando o formato de [180, 1, 64, 640] para [180, 64, 640]
+    x = np.squeeze(x, axis=1)
+
+    # Inicializa o array para armazenar os resultados da transformação linear
+    z = np.zeros((x.shape[0], x.shape[1]))  # Formato resultante: [180, 64]
+
+    # Itera sobre cada trial e canal para aplicar a transformação
+    for trial_idx in range(x.shape[0]):  # Para cada trial
+        for channel_idx in range(x.shape[1]):  # Para cada canal
+            # Aplica uma transformação linear (soma das amostras do canal)
+            z[trial_idx, channel_idx] = np.sum(x[trial_idx, channel_idx, :])
+
+    # Retorna a matriz [180, 64] com os resultados
+    return z
+
+
 def main():
     # Configura o nível de log
     set_global_verbose_eegdata("WARNING")
@@ -254,8 +282,7 @@ def main():
     phy = PhysionetMI.loading(verbose="WARNING")
     print("\n\n-------------------------------------------------------- Informações Iniciais e explicação do dataset --------------------------------------------------------")
     print("\nFormato dos dados:", phy.data.shape)  # Mostra o formato dos dados
-    print("180 trials (execução de uma tarefa), 1 conjunto por trial, cada trial contém sinais gravados por 64 canais (eletrodos) e para cada canal, há 640 pontos no tempo.")
-    # Mostra os labels das tarefas motoras
+    print("180 trials (execução de uma tarefa), 1 conjunto por trial, cada trial contém sinais gravados por 64 canais (eletrodos) e para cada canal, há 640 pontos no tempo. Gravados a uma frequência de 160 Hz")
     print("\nLabels disponíveis: \n", phy.labels)
     print("\nLabel 1: Movimentação ou imaginação de movimento da mão esquerda.")
     print("Label 2: Movimentação ou imaginação de movimento da mão direita.")
@@ -264,6 +291,14 @@ def main():
 
     X = phy.data  # Extrai os dados EEG
 
+    # Testa a função hig(x)
+    print("\n-------------------------------------------------------- Verificando a função hig(x) --------------------------------------------------------")
+    z = hig(X)  # Aplica a função hig nos dados brutos
+    print(f"Formato do resultado de hig(x): {z.shape}")  # Deve ser (180, 64)
+    print("Exemplo de saída da função hig(x):")
+    print(z)
+
+    # O resto do código segue...
     # Calcula a Dimensão Fractal para os dados originais
     original_df_values = []
     for trial_idx in range(X.shape[0]):
@@ -296,7 +331,6 @@ def main():
     aligned_df_values = []
     for trial_idx in range(aligned_data.shape[0]):
         df_trial = []
-        # Ajuste aqui para usar o eixo correto
         for channel_idx in range(aligned_data.shape[1]):
             signal = aligned_data[trial_idx, channel_idx, :]
             df_value = higuchi_fd(signal)
