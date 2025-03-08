@@ -5,6 +5,7 @@ from bcikit.modules.core import set_global_verbose_eegdata
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
 import time
 
 # Lista padrão de nomes de eletrodos para 64 canais (definida como variável global)
@@ -95,6 +96,10 @@ def evaluate_accuracy(df_values_all_channels, labels):
     X = df_values_all_channels[mask]
     y = labels[mask]
 
+    # Normaliza os dados
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
     # Divide os dados em treino e teste
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.3, random_state=42)
@@ -107,7 +112,7 @@ def evaluate_accuracy(df_values_all_channels, labels):
     y_pred = lda.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
 
-    print(f"Acurácia nos labels 1 e 2: {accuracy:.2f}%")
+    return accuracy
 
 
 def plot_classes(phy, df_values_all_channels):
@@ -312,7 +317,9 @@ def main():
 
     # Avalia a acurácia antes do alinhamento
     print("\n-------------------------------------------------------- Resultados antes do alinhamento Euclidiano --------------------------------------------------------")
-    evaluate_accuracy(original_df_values, phy.labels)
+    accuracy_before = evaluate_accuracy(original_df_values, phy.labels)
+    print(
+        f"Acurácia nos labels 1 e 2 antes do alinhamento: {accuracy_before:.2f}%")
     print("\nGerando gráficos para os dados pré alinhamento")
     # Gráfico por classe antes do alinhamento
     plot_classes(phy, original_df_values)
@@ -321,9 +328,6 @@ def main():
 
     # Avalia a acurácia depois do alinhamento
     print("\n-------------------------------------------------------- Resultados depois do alinhamento Euclidiano --------------------------------------------------------")
-    print("\nAcurácia nos labels 1 e 2: x%")
-    print("\nGerando gráficos para os dados alinhados")
-
     # Aplica o alinhamento euclidiano nos dados
     aligned_data = euclidean_alignment(X)
 
@@ -337,6 +341,12 @@ def main():
             df_trial.append(df_value)
         aligned_df_values.append(df_trial)
     aligned_df_values = np.array(aligned_df_values)
+
+    # Avalia a acurácia após o alinhamento
+    accuracy_after = evaluate_accuracy(aligned_df_values, phy.labels)
+    print(
+        f"Acurácia nos labels 1 e 2 após o alinhamento: {accuracy_after:.2f}%")
+    print("\nGerando gráficos para os dados alinhados")
 
     # Gráfico por classe após o alinhamento
     plot_classes(phy, aligned_df_values)
