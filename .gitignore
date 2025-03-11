@@ -1,0 +1,9 @@
+*.mat
+*.pyc
+*.locs
+ANNOTATORS
+RECORDS
+SHA256SUMS.txt
+
+/data
+/bcikit
