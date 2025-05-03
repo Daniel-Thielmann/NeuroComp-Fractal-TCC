@@ -1,170 +1,265 @@
-"""
-Imports
-"""
-from methods.logpower import LogPower  # já corrigido para evitar erro 'data'
-import time
+import os
 import numpy as np
-from scipy.stats import wilcoxon
+import scipy.io
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-from sklearn.metrics import accuracy_score
-from bciflow.modules.tf.bandpass.chebyshevII import chebyshevII
-from bciflow.modules.core.kfold import kfold
-from bciflow.datasets.cbcic import cbcic
-from methods.hig import HiguchiFractal
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from scipy.stats import wilcoxon
+import pandas as pd
+import logging
+from tqdm import tqdm
 
-"""
-Script principal para comparação de métodos de extração de características em EEG.
-"""
+# Configure logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(levelname)s: %(message)s')
+
+# Create results directory structure
+os.makedirs('results/Higuchi', exist_ok=True)
+os.makedirs('results/LogPower', exist_ok=True)
 
 
-def contar_sujeitos_disponiveis(max_test=20):
-    """Identifica quantos sujeitos estão disponíveis no dataset."""
-    sujeitos = []
-    for i in range(1, max_test + 1):
+class HiguchiFractal:
+    def __init__(self, kmax=10):
+        self.kmax = kmax
+
+    def _higuchi_fd(self, time_series):
+        """Calculate Higuchi Fractal Dimension for a time series"""
+        N = len(time_series)
+        L = []
+
+        for k in range(1, self.kmax + 1):
+            Lk = []
+            for m in range(k):
+                # Create segments
+                ix = np.arange(m, N, k)
+                if len(ix) < 2:
+                    continue
+
+                # Calculate length
+                diff = np.diff(time_series[ix])
+                Lkm = np.sum(np.abs(diff)) * (N - 1) / (len(ix) * k)
+                Lk.append(Lkm)
+
+            if Lk:  # Only append if we have values
+                L.append(np.log(np.mean(Lk)))
+
+        if len(L) < 2:
+            return 0.0
+
+        # Fit line to get fractal dimension
+        lnk = np.log(1.0 / np.arange(1, len(L)+1))
+        return np.polyfit(lnk, L, 1)[0]
+
+    def extract(self, data):
+        """Extract features from EEG data (trials x channels x samples)"""
+        X = []
+        for trial in data:
+            # Calculate HFD for each channel
+            trial_features = []
+            for channel in trial:
+                # Apply bandpass filter (0.5-40 Hz) first
+                filtered = self._bandpass_filter(channel)
+                hfd = self._higuchi_fd(filtered)
+                trial_features.append(hfd)
+            X.append(trial_features)
+        return np.array(X)
+
+    def _bandpass_filter(self, signal, low=0.5, high=40, sfreq=512):
+        """Simple bandpass filter"""
+        from scipy.signal import butter, filtfilt
+        nyq = 0.5 * sfreq
+        low = low / nyq
+        high = high / nyq
+        b, a = butter(4, [low, high], btype='band')
+        return filtfilt(b, a, signal)
+
+
+class LogPower:
+    def __init__(self, freq_bands=None):
+        self.freq_bands = freq_bands or {
+            'delta': (0.5, 4),
+            'theta': (4, 8),
+            'alpha': (8, 13),
+            'beta': (13, 30),
+            'gamma': (30, 40)
+        }
+
+    def extract(self, data):
+        """Extract log power features from EEG data"""
+        X = []
+        for trial in data:
+            trial_features = []
+            for channel in trial:
+                # Calculate power in each frequency band
+                band_powers = []
+                for band, (low, high) in self.freq_bands.items():
+                    power = self._bandpower(channel, low, high)
+                    # Add small constant to avoid log(0)
+                    band_powers.append(np.log(power + 1e-6))
+                trial_features.extend(band_powers)
+            X.append(trial_features)
+        return np.array(X)
+
+    def _bandpower(self, signal, low, high, sfreq=512):
+        """Compute power in specific frequency band"""
+        from scipy.signal import welch
+        freqs, psd = welch(signal, fs=sfreq)
+        idx = np.logical_and(freqs >= low, freqs <= high)
+        return np.mean(psd[idx])
+
+
+class EEGProcessor:
+    def __init__(self, data_dir):
+        self.data_dir = data_dir
+        self.channel_names = ['F3', 'FC3', 'C3', 'CP3', 'P3',
+                              'FCz', 'CPz', 'F4', 'FC4', 'C4', 'CP4', 'P4']
+
+    def load_subject_data(self, subject_id, data_type='T'):
+        """Load data for a single subject"""
+        filename = f"parsed_P{subject_id:02d}{data_type}.mat"
+        filepath = os.path.join(self.data_dir, filename)
+
+        if not os.path.exists(filepath):
+            logging.error(f"File not found: {filename}")
+            return None, None
+
         try:
-            cbcic(subject=i)
-            sujeitos.append(i)
-        except:
-            continue
-    return sujeitos
+            mat = scipy.io.loadmat(filepath)
 
+            # Get data and labels
+            data = mat['RawEEGData']  # trials x channels x samples
+            labels = mat['Labels'].flatten()
 
-def run_experiment(subject, feature_extractor, feature_name):
-    """Executa um experimento completo para um sujeito."""
-    try:
-        dataset = _load_dataset(subject)
-        pre_folding, pos_folding = _create_processing_pipeline(
-            feature_extractor)
-        start_time = time.time()
-        results = kfold(
-            target=dataset,
-            start_window=dataset['events']['cue'][0] + 0.5,
-            pre_folding=pre_folding,
-            pos_folding=pos_folding
-        )
-        elapsed_time = time.time() - start_time
-        accuracy = _calculate_accuracy(results)
-        print(
-            f"Sujeito {subject:02d} | {feature_name:15} | Acurácia: {accuracy * 100:.2f}% | Tempo: {elapsed_time:.1f}s")
-        return accuracy
-    except Exception as e:
-        print(f"Sujeito {subject:02d} | {feature_name:15} | Falhou: {str(e)}")
-        return None
+            logging.info(f"Loaded {filename} - Shape: {data.shape}")
+            return data, labels
 
+        except Exception as e:
+            logging.error(f"Error loading {filename}: {str(e)}")
+            return None, None
 
-def _load_dataset(subject):
-    """Carrega o dataset para um sujeito."""
-    dataset = cbcic(subject=subject)
-    if not dataset or 'events' not in dataset:
-        raise ValueError("Dataset inválido ou incompleto")
-    return dataset
+    def run_experiment(self, method_name, extractor, subject_ids):
+        """Run complete experiment for all subjects"""
+        all_results = []
+        accuracies = []
 
+        for subject_id in tqdm(subject_ids, desc=f"Running {method_name}"):
+            try:
+                data, labels = self.load_subject_data(subject_id, 'T')
+                if data is None or labels is None:
+                    raise ValueError("Invalid data")
 
-def _create_processing_pipeline(feature_extractor):
-    """Configura os pipelines de processamento."""
-    pre_folding = {'tf': (chebyshevII, {})}
-    pos_folding = {
-        'fe': (feature_extractor, {}),
-        'clf': (LDA(), {})
-    }
-    return pre_folding, pos_folding
+                # Create pipeline with better parameters
+                pipeline = Pipeline([
+                    ('scaler', StandardScaler()),
+                    ('clf', LDA(solver='lsqr', shrinkage='auto'))
+                ])
 
+                # Prepare for cross-validation
+                X = extractor.extract(data)
+                skf = StratifiedKFold(
+                    n_splits=5, shuffle=True, random_state=42)
+                fold_results = []
 
-def _calculate_accuracy(results):
-    """Calcula a acurácia a partir dos resultados."""
-    true_labels = np.array(results['true_label'])
-    predict_labels = np.array(
-        ['left-hand' if i[0] > i[1] else 'right-hand'
-         for i in np.array(results)[:, -2:]]
-    )
-    return accuracy_score(true_labels, predict_labels)
+                for fold, (train_idx, test_idx) in enumerate(skf.split(X, labels)):
+                    X_train, X_test = X[train_idx], X[test_idx]
+                    y_train, y_test = labels[train_idx], labels[test_idx]
 
+                    # Train and predict
+                    pipeline.fit(X_train, y_train)
+                    probas = pipeline.predict_proba(X_test)
 
-def perform_wilcoxon_test(results_method1, results_method2, method1_name, method2_name):
-    """Executa o teste de Wilcoxon para comparação de métodos."""
-    print(f"\n=== Teste de Wilcoxon: {method1_name} vs {method2_name} ===")
+                    # Store fold results
+                    for i, (true_label, pred_proba) in enumerate(zip(y_test, probas)):
+                        fold_results.append({
+                            'subject_id': subject_id,
+                            'fold': fold + 1,
+                            'true_label': true_label,
+                            'left_prob': pred_proba[0],
+                            'right_prob': pred_proba[1]
+                        })
 
-    # Filtra resultados None (experimentos que falharam)
-    res1 = [x for x in results_method1 if x is not None]
-    res2 = [x for x in results_method2 if x is not None]
+                # Save subject results
+                subject_df = pd.DataFrame(fold_results)
+                subject_file = f'results/{method_name}/P{subject_id:02d}.csv'
+                subject_df.to_csv(subject_file, index=False)
 
-    if not res1 or not res2:
-        print("Dados insuficientes para comparação estatística")
-        return
+                # Calculate subject accuracy
+                y_pred = pipeline.predict(X_test)
+                accuracy = np.mean(y_pred == y_test)
+                accuracies.append(accuracy)
+                logging.info(
+                    f"{method_name} - P{subject_id:02d}: Accuracy = {accuracy:.4f}")
 
-    stat, p_value = wilcoxon(res1, res2)
+                # Add to all results
+                all_results.append(subject_df)
 
-    print(f"Estatística do teste: {stat:.4f}")
-    print(f"Valor-p: {p_value:.4f}")
+            except Exception as e:
+                logging.error(
+                    f"Error processing subject {subject_id:02d}: {str(e)}")
+                accuracies.append(np.nan)
 
-    if p_value > 0.05:
-        print("Não há diferença estatisticamente significativa (p > 0.05)")
-    else:
-        better_method = method1_name if np.mean(
-            res1) > np.mean(res2) else method2_name
-        print(f"{better_method} é estatisticamente melhor (p < 0.05)")
+        # Save combined results
+        if all_results:
+            final_df = pd.concat(all_results)
+            final_file = f'results/{method_name}_final.csv'
+            final_df.to_csv(final_file, index=False)
+            logging.info(f"Saved final results to {final_file}")
 
-
-def display_results(subjects, higuchi_accuracies, logpower_accuracies):
-    """Exibe os resultados consolidados."""
-    print("\n=== Resultados Consolidados ===")
-
-    print("\nAcurácias por sujeito - Higuchi Fractal:")
-    for subj, acc in zip(subjects, higuchi_accuracies):
-        status = f"{acc * 100:.2f}%" if acc is not None else "Falhou"
-        print(f"Sujeito {subj}: {status}")
-
-    print("\nAcurácias por sujeito - LogPower:")
-    for subj, acc in zip(subjects, logpower_accuracies):
-        status = f"{acc * 100:.2f}%" if acc is not None else "Falhou"
-        print(f"Sujeito {subj}: {status}")
-
-    # Calcula médias apenas para experimentos bem-sucedidos
-    higuchi_mean = np.mean([x for x in higuchi_accuracies if x is not None])
-    logpower_mean = np.mean([x for x in logpower_accuracies if x is not None])
-
-    print(f"\nMédia Higuchi Fractal: {higuchi_mean * 100:.2f}%")
-    print(f"Média LogPower: {logpower_mean * 100:.2f}%")
+        return accuracies
 
 
 def main():
-    """Fluxo principal de execução."""
-    try:
-        subjects = contar_sujeitos_disponiveis()
+    DATA_DIR = "data/wcci2020/"
 
-        if not subjects:
-            print("Nenhum sujeito encontrado no dataset!")
-            return
+    # Verify data directory
+    if not os.path.exists(DATA_DIR):
+        logging.error(f"Data directory not found: {DATA_DIR}")
+        return
 
-        print(f"Sujeitos disponíveis: {subjects}")
+    processor = EEGProcessor(DATA_DIR)
+    subject_ids = range(1, 11)  # P01 to P10
 
-        extractors = [
-            (HiguchiFractal(kmax=10), "Higuchi Fractal"),
-            (LogPower(flatting=True), "LogPower")
-        ]
+    # Initialize feature extractors with improved parameters
+    # Increased kmax for better HFD estimation
+    higuchi = HiguchiFractal(kmax=15)
+    logpower = LogPower()  # Using default frequency bands
 
-        results = {name: [] for _, name in extractors}
+    # Run experiments for both methods
+    higuchi_acc = processor.run_experiment("Higuchi", higuchi, subject_ids)
+    logpower_acc = processor.run_experiment("LogPower", logpower, subject_ids)
 
-        for subject in subjects:
-            for extractor, name in extractors:
-                accuracy = run_experiment(subject, extractor, name)
-                results[name].append(accuracy)
+    # Create accuracy report
+    accuracy_df = pd.DataFrame({
+        'Subject': [f'P{i:02d}' for i in subject_ids],
+        'Higuchi': higuchi_acc,
+        'LogPower': logpower_acc
+    })
 
-        # Apresentação dos resultados
-        display_results(
-            subjects, results["Higuchi Fractal"], results["LogPower"]
-        )
+    # Calculate mean accuracies
+    mean_higuchi = np.nanmean(higuchi_acc)
+    mean_logpower = np.nanmean(logpower_acc)
 
-        # Análise estatística
-        perform_wilcoxon_test(
-            results["Higuchi Fractal"],
-            results["LogPower"],
-            "Higuchi Fractal",
-            "LogPower"
-        )
+    print("\n=== Accuracy Report ===")
+    print(accuracy_df)
+    print(f"\nHiguchi Mean Accuracy: {mean_higuchi:.4f}")
+    print(f"LogPower Mean Accuracy: {mean_logpower:.4f}")
 
-    except Exception as e:
-        print(f"\nErro durante a execução: {str(e)}")
+    # Wilcoxon signed-rank test
+    valid_pairs = [(h, l) for h, l in zip(higuchi_acc, logpower_acc)
+                   if not np.isnan(h) and not np.isnan(l)]
+
+    if len(valid_pairs) >= 2:
+        hig_valid, log_valid = zip(*valid_pairs)
+        stat, p = wilcoxon(hig_valid, log_valid)
+        print("\n=== Wilcoxon Test Results ===")
+        print(f"Statistic: {stat:.4f}")
+        print(f"P-value: {p:.4f}")
+
+        if p < 0.05:
+            print("Conclusion: Significant difference between methods (p < 0.05)")
+        else:
+            print("Conclusion: No significant difference between methods")
 
 
 if __name__ == "__main__":
