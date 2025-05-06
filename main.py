@@ -147,6 +147,16 @@ def build_final_csv_and_wilcoxon():
     })
     df_final.to_csv("results/higuchi_vs_logpower_comparison.csv", index=False)
 
+    # Estatísticas descritivas antes do Wilcoxon
+    higuchi_mean = df_final["Higuchi"].mean()
+    higuchi_std = df_final["Higuchi"].std()
+    logpower_mean = df_final["LogPower"].mean()
+    logpower_std = df_final["LogPower"].std()
+
+    print("\n=== Estatísticas descritivas ===")
+    print(f"Higuchi  -> Média: {higuchi_mean:.4f} | Desvio Padrão: {higuchi_std:.4f}")
+    print(f"LogPower -> Média: {logpower_mean:.4f} | Desvio Padrão: {logpower_std:.4f}")
+
     stat, p = wilcoxon(df_final["Higuchi"], df_final["LogPower"])
     print("\n=== Wilcoxon Test (40 CSVs combinados) ===")
     print(f"Statistic: {stat:.4f}")
