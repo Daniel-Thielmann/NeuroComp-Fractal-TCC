@@ -22,7 +22,7 @@ plt.grid(True, linestyle="--", alpha=0.5)
 plt.tight_layout()
 
 # Salva o gráfico
-output_path = "graphics/boxplot_higuchi_vs_logpower.png"
+output_path = "graphics/results/boxplot_higuchi_vs_logpower.png"
 plt.savefig(output_path)
 plt.close()
 

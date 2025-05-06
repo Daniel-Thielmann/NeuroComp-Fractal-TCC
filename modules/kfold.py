@@ -13,7 +13,7 @@ pandas
 
 '''
 
-from eegdata import eegdata
+from modules.eegdata import eegdata
 
 from sklearn.model_selection import StratifiedKFold
 import numpy as np

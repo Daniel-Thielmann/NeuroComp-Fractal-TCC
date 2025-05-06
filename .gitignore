@@ -5,7 +5,7 @@ ANNOTATORS
 RECORDS
 SHA256SUMS.txt
 
-data/wcci2020
+dataset/wcci2020
 
 __pycache__/
 

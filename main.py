@@ -11,10 +11,12 @@ from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.model_selection import StratifiedKFold
-from higuchi import HiguchiFractalEvolution
-from logpower import LogPowerEnhanced
+from methods.higuchi import HiguchiFractalEvolution
+from methods.logpower import LogPowerEnhanced
 
-# Configura o logging (para exibir progresso e erros no terminal)
+# ============================== Configuração Inicial ============================= #
+
+# Configura o logging
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s: %(message)s')
 
@@ -24,21 +26,14 @@ for method in ['Higuchi', 'LogPower']:
         os.makedirs(f'results/{method}/{phase}', exist_ok=True)
 
 
-# ======================= Classe Principal de Processamento =======================
-class EEGProcessor:
-    """
-    Responsável por carregar os dados dos sujeitos e executar os experimentos
-    com diferentes extratores de características.
-    """
+# ======================= Classe Principal de Processamento ======================= #
+# ============================ Gera CSVs de "training" ============================ #
 
+class EEGProcessor:
     def __init__(self, data_dir):
         self.data_dir = data_dir
 
     def load_subject_data(self, subject_id, data_type='T'):
-        """
-        Carrega os dados .mat de um sujeito específico.
-        Espera arquivos no formato: parsed_P01T.mat, parsed_P02T.mat, etc.
-        """
         filename = f"parsed_P{subject_id:02d}{data_type}.mat"
         filepath = os.path.join(self.data_dir, filename)
         try:
@@ -49,10 +44,6 @@ class EEGProcessor:
             return None, None
 
     def run_experiment(self, method_name, extractor, subject_ids):
-        """
-        Executa o experimento de classificação para cada sujeito, utilizando
-        validação cruzada estratificada 5-fold.
-        """
         for subject_id in tqdm(subject_ids, desc=f"Running {method_name}"):
             data, labels = self.load_subject_data(subject_id)
             if data is None:
@@ -84,7 +75,9 @@ class EEGProcessor:
             df.to_csv(output_path, index=False)
 
 
-# ======================= Geração dos CSVs Evaluate =======================
+# ==================== Usa a classe Principal de Processamento ==================== #
+# ============================ Gera CSVs de "evaluate" ============================ #
+
 def generate_evaluation_csvs(processor, extractor, method_name):
     output_dir = f"results/{method_name}/Evaluate"
     os.makedirs(output_dir, exist_ok=True)
@@ -118,8 +111,9 @@ def generate_evaluation_csvs(processor, extractor, method_name):
         df = pd.DataFrame(rows)
         df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
+# =================== Unifica os 40 csvs gerando um csv final =================== #
+# ======================== Aplica Wilcoxon no csv final ========================= #
 
-# ======================= CSV Final + Wilcoxon =======================
 def build_final_csv_and_wilcoxon():
     def extract_prob(row):
         if row['true_label'] == 1:
@@ -145,7 +139,7 @@ def build_final_csv_and_wilcoxon():
         "Higuchi": higuchi_values,
         "LogPower": logpower_values
     })
-    df_final.to_csv("results/higuchi_vs_logpower_comparison.csv", index=False)
+    df_final.to_csv("results/summaries/higuchi_vs_logpower_comparison.csv", index=False)
 
     # Estatísticas descritivas antes do Wilcoxon
     higuchi_mean = df_final["Higuchi"].mean()
@@ -167,9 +161,12 @@ def build_final_csv_and_wilcoxon():
         print("Conclusão: Não há diferença significativa entre os métodos")
 
 
-# ======================= Função Principal =======================
+# =============================== Execução =============================== #
+# ============================== do Pipeline ============================= #
+
+
 def main():
-    DATA_DIR = "data/wcci2020/"
+    DATA_DIR = "dataset/wcci2020/"
     if not os.path.exists(DATA_DIR):
         logging.error(f"Data directory not found: {DATA_DIR}")
         return
@@ -179,15 +176,12 @@ def main():
     higuchi = HiguchiFractalEvolution(kmax=10)
     logpower = LogPowerEnhanced()
 
-    # Etapa 1: já gera os arquivos Training
     processor.run_experiment("Higuchi", higuchi, subject_ids)
     processor.run_experiment("LogPower", logpower, subject_ids)
 
-    # Etapa 2: gera arquivos Evaluate
     generate_evaluation_csvs(processor, higuchi, "Higuchi")
     generate_evaluation_csvs(processor, logpower, "LogPower")
 
-    # Etapa 3: monta CSV final e realiza Wilcoxon
     build_final_csv_and_wilcoxon()
 
 

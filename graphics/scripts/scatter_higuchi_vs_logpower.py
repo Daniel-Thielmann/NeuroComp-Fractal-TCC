@@ -25,7 +25,7 @@ plt.legend()
 plt.tight_layout()
 
 # Salva o gráfico
-output_path = "graphics/scatter_higuchi_vs_logpower.png"
+output_path = "graphics/results/scatter_higuchi_vs_logpower.png"
 plt.savefig(output_path)
 plt.close()
 
