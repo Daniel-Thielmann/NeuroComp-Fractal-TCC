@@ -11,8 +11,10 @@ from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.model_selection import StratifiedKFold
-from methods.higuchi import HiguchiFractalEvolution
-from methods.logpower import LogPowerEnhanced
+from methods.features.higuchi import HiguchiFractalEvolution
+from methods.features.logpower import LogPowerEnhanced
+from methods.pipelines.csp_fractal import run_csp_fractal
+
 
 # ============================== Configuração Inicial ============================= #
 
@@ -111,6 +113,8 @@ def generate_evaluation_csvs(processor, extractor, method_name):
         df = pd.DataFrame(rows)
         df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
+
+
 # =================== Unifica os 40 csvs gerando um csv final =================== #
 # ======================== Aplica Wilcoxon no csv final ========================= #
 
@@ -182,8 +186,15 @@ def main():
     generate_evaluation_csvs(processor, higuchi, "Higuchi")
     generate_evaluation_csvs(processor, logpower, "LogPower")
 
-    build_final_csv_and_wilcoxon()
+ # ==================== Executa CSP + Fractal ==================== #
+    for subject_id in tqdm(subject_ids, desc="Running CSP + Fractal"):
+        rows = run_csp_fractal(subject_id)
+        df = pd.DataFrame(rows)
+        output_dir = "results/CSP_Fractal/Training"
+        os.makedirs(output_dir, exist_ok=True)
+        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
+    build_final_csv_and_wilcoxon()
 
 if __name__ == "__main__":
     main()

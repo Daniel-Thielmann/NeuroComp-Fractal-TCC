@@ -1,7 +1,5 @@
-
 import numpy as np
 from scipy.signal import welch, butter, filtfilt, hilbert
-
 
 class HiguchiFractalEvolution:
     def __init__(self, kmax=10, bands=None, sfreq=512):
@@ -103,3 +101,18 @@ class HiguchiFractalEvolution:
                         data[i, j, :], band_name, low, high)
                     X[i, start:end] = features[:features_per_band]
         return X
+
+def higuchi_fd(signal, kmax=10):
+    L = []
+    x = np.asarray(signal)
+    N = x.size
+    for k in range(1, kmax + 1):
+        Lk = 0
+        for m in range(k):
+            Lmk = 0
+            for i in range(1, int((N - m) / k)):
+                Lmk += abs(x[m + i * k] - x[m + (i - 1) * k])
+            Lmk /= k * ((N - 1) / k)
+            Lk += Lmk
+        L.append(np.log(Lk / k))
+    return -np.polyfit(np.log(range(1, kmax + 1)), L, 1)[0]
