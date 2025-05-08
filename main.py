@@ -84,7 +84,7 @@ def generate_evaluation_csvs(processor, extractor, method_name):
     output_dir = f"results/{method_name}/Evaluate"
     os.makedirs(output_dir, exist_ok=True)
 
-    for subject_id in range(1, 11):
+    for subject_id in range(1, 10):
         data, labels = processor.load_subject_data(subject_id)
         if data is None:
             continue
@@ -112,7 +112,6 @@ def generate_evaluation_csvs(processor, extractor, method_name):
 
         df = pd.DataFrame(rows)
         df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
-
 
 
 # =================== Unifica os 40 csvs gerando um csv final =================== #
@@ -143,7 +142,8 @@ def build_final_csv_and_wilcoxon():
         "Higuchi": higuchi_values,
         "LogPower": logpower_values
     })
-    df_final.to_csv("results/summaries/higuchi_vs_logpower_comparison.csv", index=False)
+    df_final.to_csv(
+        "results/summaries/higuchi_vs_logpower_comparison.csv", index=False)
 
     # Estatísticas descritivas antes do Wilcoxon
     higuchi_mean = df_final["Higuchi"].mean()
@@ -152,8 +152,10 @@ def build_final_csv_and_wilcoxon():
     logpower_std = df_final["LogPower"].std()
 
     print("\n=== Estatísticas descritivas ===")
-    print(f"Higuchi  -> Média: {higuchi_mean:.4f} | Desvio Padrão: {higuchi_std:.4f}")
-    print(f"LogPower -> Média: {logpower_mean:.4f} | Desvio Padrão: {logpower_std:.4f}")
+    print(
+        f"Higuchi  -> Média: {higuchi_mean:.4f} | Desvio Padrão: {higuchi_std:.4f}")
+    print(
+        f"LogPower -> Média: {logpower_mean:.4f} | Desvio Padrão: {logpower_std:.4f}")
 
     stat, p = wilcoxon(df_final["Higuchi"], df_final["LogPower"])
     print("\n=== Wilcoxon Test (40 CSVs combinados) ===")
@@ -187,7 +189,7 @@ def main():
     generate_evaluation_csvs(processor, logpower, "LogPower")
 
  # ==================== Executa CSP + Fractal ==================== #
-    for subject_id in tqdm(subject_ids, desc="Running CSP + Fractal"):
+    for subject_id in tqdm(range(1, 10), desc="Running CSP + Fractal"):
         rows = run_csp_fractal(subject_id)
         df = pd.DataFrame(rows)
         output_dir = "results/CSP_Fractal/Training"
@@ -195,6 +197,7 @@ def main():
         df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
     build_final_csv_and_wilcoxon()
+
 
 if __name__ == "__main__":
     main()

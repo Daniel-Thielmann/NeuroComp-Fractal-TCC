@@ -6,22 +6,30 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.metrics import accuracy_score
 from methods.features.higuchi import higuchi_fd
 
+
 def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
     dataset = cbcic(subject=subject_id, path=data_path)
-    X = dataset["X"].squeeze(1)  # [n_trials, channels, samples]
+    # [n_trials, channels, samples]
+    X = dataset["X"].squeeze(1)
     y = np.array(dataset["y"])
+    y = y + 1  # Corrige os rótulos de [0,1] para [1,2]
 
-    X_band = np.expand_dims(X, axis=1)  # [n_trials, 1, channels, samples]
+    # [n_trials, 1, channels, samples]
+    X_band = np.expand_dims(X, axis=1)
     transformer = csp()
     transformer.fit({"X": X_band, "y": y})
-    X_csp = transformer.transform({"X": X_band})[:, 0]  # [n_trials, components, samples]
+    # [n_trials, components, samples]
+    X_csp = transformer.transform({"X": X_band})["X"][:, 0]
 
+    # Aplica Higuchi FD componente a componente
     fd_features = []
     for trial in X_csp:
-        trial_fd = [higuchi_fd(component) for component in trial]
+        trial_fd = [higuchi_fd(signal_1d)
+                    for signal_1d in trial]  # signal_1d: (samples,)
         fd_features.append(trial_fd)
-    fd_features = np.array(fd_features)
+    fd_features = np.array(fd_features)  # [n_trials, components]
 
+    # Classificação com LDA e validação cruzada
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     rows = []
 

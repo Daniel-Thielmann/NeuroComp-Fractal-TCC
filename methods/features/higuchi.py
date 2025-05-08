@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.signal import welch, butter, filtfilt, hilbert
 
+
 class HiguchiFractalEvolution:
     def __init__(self, kmax=10, bands=None, sfreq=512):
         self.kmax = kmax
@@ -102,7 +103,11 @@ class HiguchiFractalEvolution:
                     X[i, start:end] = features[:features_per_band]
         return X
 
+
 def higuchi_fd(signal, kmax=10):
+    """
+    Calcula a Dimensão Fractal de Higuchi com tratamento seguro de índice.
+    """
     L = []
     x = np.asarray(signal)
     N = x.size
@@ -110,9 +115,20 @@ def higuchi_fd(signal, kmax=10):
         Lk = 0
         for m in range(k):
             Lmk = 0
-            for i in range(1, int((N - m) / k)):
-                Lmk += abs(x[m + i * k] - x[m + (i - 1) * k])
-            Lmk /= k * ((N - 1) / k)
+            max_i = int((N - m - 1) / k)
+            if max_i < 1:
+                continue
+            for i in range(1, max_i + 1):
+                try:
+                    Lmk += abs(x[m + i * k] - x[m + (i - 1) * k])
+                except IndexError:
+                    continue
+            Lmk /= k * max_i if max_i > 0 else 1
             Lk += Lmk
-        L.append(np.log(Lk / k))
+        Lk /= k
+        if Lk > 0:
+            L.append(np.log(Lk))
+        else:
+            L.append(0.0)
+
     return -np.polyfit(np.log(range(1, kmax + 1)), L, 1)[0]
