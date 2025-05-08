@@ -14,6 +14,7 @@ from sklearn.model_selection import StratifiedKFold
 from methods.features.higuchi import HiguchiFractalEvolution
 from methods.features.logpower import LogPowerEnhanced
 from methods.pipelines.csp_fractal import run_csp_fractal
+from utils.logs import log_results
 
 
 # ============================== Configuração Inicial ============================= #
@@ -195,6 +196,8 @@ def main():
         output_dir = "results/CSP_Fractal/Training"
         os.makedirs(output_dir, exist_ok=True)
         df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
+
+    log_results("CSP_Fractal")
 
     build_final_csv_and_wilcoxon()
 
