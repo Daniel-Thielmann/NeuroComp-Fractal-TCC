@@ -1,0 +1,36 @@
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (C) 2025 Daniel Thielmann, Gabriel Souza
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+### Descrição do Projeto
+
+Este software implementa e avalia o impacto do **Alinhamento Euclidiano** na melhoria da **Dimensão Fractal (DF)** aplicada a sinais EEG do dataset público **EEG Motor Movement/Imagery Dataset (PhysioNet)** para classificação de tarefas motoras imaginadas e reais.
+
+Referência de dados:
+Goldberger AL, et al. (2000) PhysioBank, PhysioToolkit, and PhysioNet. _Circulation_. 101(23):e215-e220.  
+Disponível em: https://physionet.org/content/eegmmidb/1.0.0/
+
+---
+
+Inclui módulos para:
+
+- Cálculo da **Dimensão Fractal de Higuchi**
+- Aplicação de **classificadores como LDA e QDA**
+- Visualização dos dados antes e depois do alinhamento
+- Pipeline completo com extração de características, treino/teste e gráficos
