@@ -1,30 +1,35 @@
-
 import numpy as np
-from scipy.signal import welch
 
 
-class LogPowerEnhanced:
-    def __init__(self, freq_bands=None, sfreq=512):
-        self.freq_bands = freq_bands or [
-            ('delta', 0.5, 4),
-            ('theta', 4, 8),
-            ('alpha', 8, 13),
-            ('beta', 13, 30),
-            ('gamma', 30, 40)
-        ]
-        self.sfreq = sfreq
+def logpower(eegdata: dict, flating: bool = False) -> dict:
+    """
+    Calcula o Log Power dos sinais EEG contidos em eegdata['X'].
 
-    def extract(self, data):
-        n_trials, n_channels, _ = data.shape
-        n_bands = len(self.freq_bands)
-        X = np.zeros((n_trials, n_channels * n_bands))
+    Parameters
+    ----------
+    eegdata : dict
+        Deve conter a chave 'X' com shape [n_trials, bands, channels, samples]
+    flating : bool
+        Se True, retorna dados flattenados por trial.
 
-        for i in range(n_trials):
-            for j in range(n_channels):
-                freqs, psd = welch(data[i, j, :], fs=self.sfreq, nperseg=128)
-                for k, (_, low, high) in enumerate(self.freq_bands):
-                    mask = (freqs >= low) & (freqs <= high)
-                    if np.any(mask):
-                        power = np.mean(psd[mask])
-                        X[i, j * n_bands + k] = np.log(power + 1e-12)
-        return X
+    Returns
+    -------
+    dict com chave 'X' contendo os dados transformados
+    """
+    X = eegdata["X"].copy()
+    X = X.reshape((np.prod(X.shape[:-1]), X.shape[-1]))
+
+    X_ = []
+    for signal_ in range(X.shape[0]):
+        filtered = np.log(np.mean(X[signal_] ** 2))
+        X_.append(filtered)
+
+    X_ = np.array(X_)
+    shape = eegdata["X"].shape
+    if flating:
+        X_ = X_.reshape((shape[0], np.prod(shape[1:-1])))
+    else:
+        X_ = X_.reshape((shape[0], shape[1], np.prod(shape[2:-1])))
+
+    eegdata["X"] = X_
+    return eegdata

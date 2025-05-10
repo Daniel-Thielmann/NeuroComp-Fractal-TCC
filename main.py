@@ -5,43 +5,47 @@ import pandas as pd
 import logging
 from tqdm import tqdm
 from scipy.stats import wilcoxon
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.model_selection import StratifiedKFold
 from methods.features.higuchi import HiguchiFractalEvolution
-from methods.features.logpower import LogPowerEnhanced
+from methods.features.logpower import logpower as logpower_fn
 from methods.pipelines.csp_fractal import run_csp_fractal
-from utils.logs import log_results
+from utils.logs import log_summary
+from methods.pipelines.csp_logpower import run_csp_logpower
+from methods.pipelines.fbcsp_fractal import run_fbcsp_fractal
 
 
-# ============================== Configuração Inicial ============================= #
+class LogPowerWrapper:
+    def extract(self, data):
+        eegdata = {"X": np.expand_dims(data, axis=1)}
+        return logpower_fn(eegdata, flating=True)["X"]
+
+
+# ===================== Configuração Inicial ====================== #
 
 # Configura o logging
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 
 # Cria diretórios de resultados se ainda não existirem
-for method in ['Higuchi', 'LogPower']:
-    for phase in ['Training', 'Evaluate']:
-        os.makedirs(f'results/{method}/{phase}', exist_ok=True)
+for method in ["Higuchi", "LogPower"]:
+    for phase in ["Training", "Evaluate"]:
+        os.makedirs(f"results/{method}/{phase}", exist_ok=True)
 
 
-# ======================= Classe Principal de Processamento ======================= #
-# ============================ Gera CSVs de "training" ============================ #
+# =============== Classe Principal de Processamento =============== #
+# ==================== Gera CSVs de "training" ==================== #
+
 
 class EEGProcessor:
     def __init__(self, data_dir):
         self.data_dir = data_dir
 
-    def load_subject_data(self, subject_id, data_type='T'):
+    def load_subject_data(self, subject_id, data_type="T"):
         filename = f"parsed_P{subject_id:02d}{data_type}.mat"
         filepath = os.path.join(self.data_dir, filename)
         try:
             mat = scipy.io.loadmat(filepath)
-            return mat['RawEEGData'], mat['Labels'].flatten()
+            return mat["RawEEGData"], mat["Labels"].flatten()
         except Exception as e:
             logging.error(f"Erro ao carregar {filename}: {str(e)}")
             return None, None
@@ -65,21 +69,24 @@ class EEGProcessor:
                 probs = clf.predict_proba(X_test)
 
                 for i, idx in enumerate(test_idx):
-                    rows.append({
-                        'subject_id': subject_id,
-                        'fold': fold_idx,
-                        'true_label': y_test[i],
-                        'left_prob': probs[i][0],
-                        'right_prob': probs[i][1],
-                    })
+                    rows.append(
+                        {
+                            "subject_id": subject_id,
+                            "fold": fold_idx,
+                            "true_label": y_test[i],
+                            "left_prob": probs[i][0],
+                            "right_prob": probs[i][1],
+                        }
+                    )
 
             df = pd.DataFrame(rows)
-            output_path = f'results/{method_name}/Training/P{subject_id:02d}.csv'
+            output_path = f"results/{method_name}/Training/P{subject_id:02d}.csv"
             df.to_csv(output_path, index=False)
 
 
-# ==================== Usa a classe Principal de Processamento ==================== #
-# ============================ Gera CSVs de "evaluate" ============================ #
+# ============= Usa a classe Principal de Processamento ============= #
+# ===================== Gera CSVs de "evaluate" ===================== #
+
 
 def generate_evaluation_csvs(processor, extractor, method_name):
     output_dir = f"results/{method_name}/Evaluate"
@@ -103,48 +110,47 @@ def generate_evaluation_csvs(processor, extractor, method_name):
             probs = clf.predict_proba(X_test)
 
             for i, idx in enumerate(test_idx):
-                rows.append({
-                    'subject_id': subject_id,
-                    'fold': fold_idx,
-                    'true_label': y_test[i],
-                    'left_prob': probs[i][0],
-                    'right_prob': probs[i][1],
-                })
+                rows.append(
+                    {
+                        "subject_id": subject_id,
+                        "fold": fold_idx,
+                        "true_label": y_test[i],
+                        "left_prob": probs[i][0],
+                        "right_prob": probs[i][1],
+                    }
+                )
 
         df = pd.DataFrame(rows)
         df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
 
-# =================== Unifica os 40 csvs gerando um csv final =================== #
-# ======================== Aplica Wilcoxon no csv final ========================= #
+# ============= Unifica os 40 csvs gerando um csv final ============= #
+# ================== Aplica Wilcoxon no csv final =================== #
+
 
 def build_final_csv_and_wilcoxon():
     def extract_prob(row):
-        if row['true_label'] == 1:
-            return row['left_prob']
-        elif row['true_label'] == 2:
-            return row['right_prob']
+        if row["true_label"] == 1:
+            return row["left_prob"]
+        elif row["true_label"] == 2:
+            return row["right_prob"]
         return None
 
     def load_all_probs(method):
         all_probs = []
-        for phase in ['Training', 'Evaluate']:
+        for phase in ["Training", "Evaluate"]:
             folder = f"results/{method}/{phase}"
             for file in sorted(os.listdir(folder)):
                 df = pd.read_csv(os.path.join(folder, file))
-                df = df[df['true_label'].isin([1, 2])]
+                df = df[df["true_label"].isin([1, 2])]
                 all_probs.extend(df.apply(extract_prob, axis=1))
         return all_probs
 
     higuchi_values = load_all_probs("Higuchi")
     logpower_values = load_all_probs("LogPower")
 
-    df_final = pd.DataFrame({
-        "Higuchi": higuchi_values,
-        "LogPower": logpower_values
-    })
-    df_final.to_csv(
-        "results/summaries/higuchi_vs_logpower_comparison.csv", index=False)
+    df_final = pd.DataFrame({"Higuchi": higuchi_values, "LogPower": logpower_values})
+    df_final.to_csv("results/summaries/higuchi_vs_logpower_comparison.csv", index=False)
 
     # Estatísticas descritivas antes do Wilcoxon
     higuchi_mean = df_final["Higuchi"].mean()
@@ -153,10 +159,8 @@ def build_final_csv_and_wilcoxon():
     logpower_std = df_final["LogPower"].std()
 
     print("\n=== Estatísticas descritivas ===")
-    print(
-        f"Higuchi  -> Média: {higuchi_mean:.4f} | Desvio Padrão: {higuchi_std:.4f}")
-    print(
-        f"LogPower -> Média: {logpower_mean:.4f} | Desvio Padrão: {logpower_std:.4f}")
+    print(f"Higuchi  -> Média: {higuchi_mean:.4f} | Desvio Padrão: {higuchi_std:.4f}")
+    print(f"LogPower -> Média: {logpower_mean:.4f} | Desvio Padrão: {logpower_std:.4f}")
 
     stat, p = wilcoxon(df_final["Higuchi"], df_final["LogPower"])
     print("\n=== Wilcoxon Test (40 CSVs combinados) ===")
@@ -181,15 +185,16 @@ def main():
     processor = EEGProcessor(DATA_DIR)
     subject_ids = range(1, 11)
     higuchi = HiguchiFractalEvolution(kmax=10)
-    logpower = LogPowerEnhanced()
+    logpower = LogPowerWrapper()
 
+    # ==================== Executa Higuchi e LogPower ==================== #
     processor.run_experiment("Higuchi", higuchi, subject_ids)
     processor.run_experiment("LogPower", logpower, subject_ids)
 
     generate_evaluation_csvs(processor, higuchi, "Higuchi")
     generate_evaluation_csvs(processor, logpower, "LogPower")
 
- # ==================== Executa CSP + Fractal ==================== #
+    # ==================== Executa CSP + Fractal ==================== #
     for subject_id in tqdm(range(1, 10), desc="Running CSP + Fractal"):
         rows = run_csp_fractal(subject_id)
         df = pd.DataFrame(rows)
@@ -197,8 +202,38 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
         df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
-    log_results("CSP_Fractal")
+    # ==================== Executa CSP + LogPower ==================== #
+    for subject_id in tqdm(range(1, 10), desc="Running CSP + LogPower"):
+        rows = run_csp_logpower(subject_id)
+        df = pd.DataFrame(rows)
+        output_dir = "results/CSP_LogPower/Training"
+        os.makedirs(output_dir, exist_ok=True)
+        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
+    # ==================== Executa FBCSP + Fractal ==================== #
+    for subject_id in tqdm(range(1, 10), desc="Running FBCSP + Fractal"):
+        rows = run_fbcsp_fractal(subject_id)
+        df = pd.DataFrame(rows)
+        output_dir = "results/FBCSP_Fractal/Training"
+        os.makedirs(output_dir, exist_ok=True)
+        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
+
+    # ==================== Logs finais organizados ==================== #
+    from utils.logs import log_summary
+
+    summaries = [
+        log_summary("Higuchi"),
+        log_summary("LogPower"),
+        log_summary("CSP_Fractal"),
+        log_summary("CSP_LogPower"),
+        log_summary("FBCSP_Fractal"),
+    ]
+
+    print("\n=== RESUMO FINAL DOS MÉTODOS ===")
+    for s in summaries:
+        print(s)
+
+    # ============== Teste estatístico final (Wilcoxon) ============== #
     build_final_csv_and_wilcoxon()
 
 
