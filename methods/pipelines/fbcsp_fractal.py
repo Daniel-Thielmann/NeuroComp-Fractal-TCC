@@ -1,43 +1,41 @@
 import numpy as np
-import pandas as pd
-import os
 from bciflow.datasets import cbcic
 from bciflow.modules.sf.csp import csp
 from bciflow.modules.tf.filterbank import filterbank
-from methods.features.higuchi import higuchi_fd
+from methods.features.fractal import HiguchiFractalEvolution
 from sklearn.model_selection import StratifiedKFold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 
 def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
-    # 1. Carrega os dados
     dataset = cbcic(subject=subject_id, path=data_path)
-    X = dataset["X"]  # [n_trials, 1, channels, samples]
-    y = np.array(dataset["y"])
-    y = y + 1  # Ajusta para [1, 2]
+    X = dataset["X"]
+    y = np.array(dataset["y"]) + 1
 
-    # 2. Aplica filtro bank (Chebyshev Type II)
+    bands = [(8, 12), (13, 30), (8, 13)]  # mu, beta, alpha
     eeg_filtered, _ = filterbank({"X": X, "sfreq": 512}, kind_bp="chebyshevII")
     X_filtered = eeg_filtered["X"]
 
-    # Shape após filtro: [n_trials, n_bandas, channels, samples]
-
-    # 3. Aplica CSP por banda
     transformer = csp()
     transformer.fit({"X": X_filtered, "y": y})
     X_csp = transformer.transform({"X": X_filtered})["X"]
-    # Shape: [n_trials, n_bandas, n_components, samples]
 
-    # 4. Extrai Higuchi FD de cada componente CSP
+    hfd = HiguchiFractalEvolution(kmax=80)
     features = []
-    for trial in X_csp:  # trial shape: [n_bandas, n_components, samples]
+    for trial in X_csp:
         trial_feat = []
         for band in trial:
-            trial_feat.extend([higuchi_fd(component) for component in band])
+            for comp in band:
+                slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
+                trial_feat.extend([slope, mean_lk, std_lk])
         features.append(trial_feat)
-    features = np.array(features)  # [n_trials, total_features]
+    features = np.array(features)
 
-    # 5. Classificação com LDA
+    features = StandardScaler().fit_transform(features)
+    features = PCA(n_components=10).fit_transform(features)
+
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     rows = []
 

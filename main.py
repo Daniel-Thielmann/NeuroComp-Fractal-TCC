@@ -1,166 +1,146 @@
+# ===================== Configuração Inicial ====================== #
 import os
 import numpy as np
-import scipy.io
 import pandas as pd
-import logging
 from tqdm import tqdm
 from scipy.stats import wilcoxon
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.model_selection import StratifiedKFold
-from methods.features.higuchi import HiguchiFractalEvolution
+from sklearn.preprocessing import StandardScaler
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+
+from bciflow.datasets import cbcic
+from bciflow.modules.tf.filterbank import filterbank
 from methods.features.logpower import logpower as logpower_fn
+from methods.features.fractal import HiguchiFractalEvolution
 from methods.pipelines.csp_fractal import run_csp_fractal
-from utils.logs import log_summary
 from methods.pipelines.csp_logpower import run_csp_logpower
 from methods.pipelines.fbcsp_fractal import run_fbcsp_fractal
 from methods.pipelines.fbcsp_logpower import run_fbcsp_logpower
 
-
-class LogPowerWrapper:
-    def extract(self, data):
-        eegdata = {"X": np.expand_dims(data, axis=1)}
-        return logpower_fn(eegdata, flating=True)["X"]
+os.makedirs("results/summaries", exist_ok=True)
 
 
-# ===================== Configuração Inicial ====================== #
-
-# Configura o logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
-
-# Cria diretórios de resultados se ainda não existirem
-for method in ["Higuchi", "LogPower"]:
-    for phase in ["Training", "Evaluate"]:
-        os.makedirs(f"results/{method}/{phase}", exist_ok=True)
-
-
-# =============== Classe Principal de Processamento =============== #
-# ==================== Gera CSVs de "training" ==================== #
-
-
-class EEGProcessor:
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-
-    def load_subject_data(self, subject_id, data_type="T"):
-        filename = f"parsed_P{subject_id:02d}{data_type}.mat"
-        filepath = os.path.join(self.data_dir, filename)
-        try:
-            mat = scipy.io.loadmat(filepath)
-            return mat["RawEEGData"], mat["Labels"].flatten()
-        except Exception as e:
-            logging.error(f"Erro ao carregar {filename}: {str(e)}")
-            return None, None
-
-    def run_experiment(self, method_name, extractor, subject_ids):
-        for subject_id in tqdm(subject_ids, desc=f"Running {method_name}"):
-            data, labels = self.load_subject_data(subject_id)
-            if data is None:
-                continue
-
-            X = extractor.extract(data)
-            skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-            rows = []
-            for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X, labels)):
-                X_train, X_test = X[train_idx], X[test_idx]
-                y_train, y_test = labels[train_idx], labels[test_idx]
-
-                clf = LDA()
-                clf.fit(X_train, y_train)
-                probs = clf.predict_proba(X_test)
-
-                for i, idx in enumerate(test_idx):
-                    rows.append(
-                        {
-                            "subject_id": subject_id,
-                            "fold": fold_idx,
-                            "true_label": y_test[i],
-                            "left_prob": probs[i][0],
-                            "right_prob": probs[i][1],
-                        }
-                    )
-
-            df = pd.DataFrame(rows)
-            output_path = f"results/{method_name}/Training/P{subject_id:02d}.csv"
-            df.to_csv(output_path, index=False)
-
-
-# ============= Usa a classe Principal de Processamento ============= #
-# ===================== Gera CSVs de "evaluate" ===================== #
-
-
-def generate_evaluation_csvs(processor, extractor, method_name):
-    output_dir = f"results/{method_name}/Evaluate"
-    os.makedirs(output_dir, exist_ok=True)
+# ================== Roda método Fractal (ex-Higuchi) ================== #
+def run_fractal():
+    all_rows = []
+    extractor = HiguchiFractalEvolution(kmax=80)
 
     for subject_id in range(1, 10):
-        data, labels = processor.load_subject_data(subject_id)
-        if data is None:
-            continue
+        dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
+        X = dataset["X"].squeeze(1)
+        y = np.array(dataset["y"]) + 1
 
-        X = extractor.extract(data)
+        mask = (y == 1) | (y == 2)
+        X = X[mask]
+        y = y[mask]
+
+        X_feat = extractor.extract(X)
+        X_feat = StandardScaler().fit_transform(X_feat)
+
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-        rows = []
-        for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X, labels)):
-            X_train, X_test = X[train_idx], X[test_idx]
-            y_train, y_test = labels[train_idx], labels[test_idx]
-
+        for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
             clf = LDA()
-            clf.fit(X_train, y_train)
-            probs = clf.predict_proba(X_test)
-
+            clf.fit(X_feat[train_idx], y[train_idx])
+            probs = clf.predict_proba(X_feat[test_idx])
             for i, idx in enumerate(test_idx):
-                rows.append(
+                all_rows.append(
                     {
                         "subject_id": subject_id,
                         "fold": fold_idx,
-                        "true_label": y_test[i],
+                        "true_label": y[idx],
                         "left_prob": probs[i][0],
                         "right_prob": probs[i][1],
                     }
                 )
 
-        df = pd.DataFrame(rows)
-        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
+        df_sub = pd.DataFrame([r for r in all_rows if r["subject_id"] == subject_id])
+        os.makedirs("results/Fractal/Training", exist_ok=True)
+        df_sub.to_csv(f"results/Fractal/Training/P{subject_id:02d}.csv", index=False)
+
+    return pd.DataFrame(all_rows)
 
 
-# ============= Unifica os 40 csvs gerando um csv final ============= #
-# ================== Aplica Wilcoxon no csv final =================== #
+# =================== LogPower =================== #
+def run_logpower():
+    all_rows = []
+
+    for subject_id in range(1, 10):
+        dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
+        X = dataset["X"]
+        y = np.array(dataset["y"]) + 1
+
+        mask = (y == 1) | (y == 2)
+        X = X[mask]
+        y = y[mask]
+
+        eegdata = {"X": X, "sfreq": 512}
+        eegdata, _ = filterbank(eegdata, kind_bp="chebyshevII")
+        X_feat = logpower_fn(eegdata, flating=True)["X"]
+        X_feat = StandardScaler().fit_transform(X_feat)
+
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
+            clf = LDA()
+            clf.fit(X_feat[train_idx], y[train_idx])
+            probs = clf.predict_proba(X_feat[test_idx])
+            for i, idx in enumerate(test_idx):
+                all_rows.append(
+                    {
+                        "subject_id": subject_id,
+                        "fold": fold_idx,
+                        "true_label": y[idx],
+                        "left_prob": probs[i][0],
+                        "right_prob": probs[i][1],
+                    }
+                )
+
+        df_sub = pd.DataFrame([r for r in all_rows if r["subject_id"] == subject_id])
+        os.makedirs("results/LogPower/Training", exist_ok=True)
+        df_sub.to_csv(f"results/LogPower/Training/P{subject_id:02d}.csv", index=False)
+
+    return pd.DataFrame(all_rows)
 
 
+# =================== Log Summary =================== #
+def log_summary(method_name):
+    folder = f"results/{method_name}/Training"
+    df = pd.concat(
+        [pd.read_csv(os.path.join(folder, f)) for f in sorted(os.listdir(folder))]
+    )
+    df = df[df["true_label"].isin([1, 2])]
+    df["correct_prob"] = df.apply(
+        lambda row: row["left_prob"] if row["true_label"] == 1 else row["right_prob"],
+        axis=1,
+    )
+    acc = (df["true_label"] == df["left_prob"].lt(0.5).astype(int) + 1).mean()
+    mean_prob = df["correct_prob"].mean()
+    total = len(df)
+    counts = dict(df["true_label"].value_counts().sort_index())
+    return f"[{method_name}] Acurácia: {acc:.4f} | Média Prob. Correta: {mean_prob:.4f} | Amostras: {total} | Rótulos: {counts}"
+
+
+# =================== Wilcoxon =================== #
 def build_final_csv_and_wilcoxon():
-    def extract_prob(row):
-        if row["true_label"] == 1:
-            return row["left_prob"]
-        elif row["true_label"] == 2:
-            return row["right_prob"]
-        return None
+    def extract_correct_prob(row):
+        return row["left_prob"] if row["true_label"] == 1 else row["right_prob"]
 
-    def load_all_probs(method):
+    def load_all(method):
+        folder = f"results/{method}/Training"
         all_probs = []
-        for phase in ["Training", "Evaluate"]:
-            folder = f"results/{method}/{phase}"
-            for file in sorted(os.listdir(folder)):
-                df = pd.read_csv(os.path.join(folder, file))
-                df = df[df["true_label"].isin([1, 2])]
-                all_probs.extend(df.apply(extract_prob, axis=1))
+        for file in sorted(os.listdir(folder)):
+            df = pd.read_csv(os.path.join(folder, file))
+            df = df[df["true_label"].isin([1, 2])]
+            all_probs.extend(df.apply(extract_correct_prob, axis=1))
         return all_probs
 
-    higuchi_values = load_all_probs("Higuchi")
-    logpower_values = load_all_probs("LogPower")
+    fractal_vals = load_all("Fractal")
+    logpower_vals = load_all("LogPower")
 
-    df_final = pd.DataFrame({"Higuchi": higuchi_values, "LogPower": logpower_values})
-    df_final.to_csv("results/summaries/higuchi_vs_logpower_comparison.csv", index=False)
+    df_final = pd.DataFrame({"Fractal": fractal_vals, "LogPower": logpower_vals})
+    df_final.to_csv("results/summaries/fractal_vs_logpower_comparison.csv", index=False)
 
-    # Estatísticas descritivas antes do Wilcoxon
-    higuchi_mean = df_final["Higuchi"].mean()
-    higuchi_std = df_final["Higuchi"].std()
-    logpower_mean = df_final["LogPower"].mean()
-    logpower_std = df_final["LogPower"].std()
-
-    stat, p = wilcoxon(df_final["Higuchi"], df_final["LogPower"])
-    print("\n=== Wilcoxon Test (40 CSVs combinados) ===")
+    stat, p = wilcoxon(df_final["Fractal"], df_final["LogPower"])
+    print("\n=== Wilcoxon Test (Fractal vs LogPower) ===")
     print(f"Statistic: {stat:.4f}")
     print(f"P-value : {p:.4f}")
     if p < 0.05:
@@ -169,76 +149,49 @@ def build_final_csv_and_wilcoxon():
         print("Conclusão: Não há diferença significativa entre os métodos")
 
 
-# =============================== Execução =============================== #
-# ============================== do Pipeline ============================= #
-
-
+# =================== Execução =================== #
 def main():
-    DATA_DIR = "dataset/wcci2020/"
-    if not os.path.exists(DATA_DIR):
-        logging.error(f"Data directory not found: {DATA_DIR}")
-        return
+    print("Running Fractal...")
+    run_fractal()
 
-    processor = EEGProcessor(DATA_DIR)
-    subject_ids = range(1, 11)
-    higuchi = HiguchiFractalEvolution(kmax=10)
-    logpower = LogPowerWrapper()
+    print("Running LogPower...")
+    run_logpower()
 
-    # ==================== Executa Higuchi e LogPower ==================== #
-    processor.run_experiment("Higuchi", higuchi, subject_ids)
-    processor.run_experiment("LogPower", logpower, subject_ids)
+    print("Running CSP + Fractal...")
+    for subject_id in tqdm(range(1, 10), desc="CSP + Fractal"):
+        df = pd.DataFrame(run_csp_fractal(subject_id))
+        os.makedirs("results/CSP_Fractal/Training", exist_ok=True)
+        df.to_csv(f"results/CSP_Fractal/Training/P{subject_id:02d}.csv", index=False)
 
-    generate_evaluation_csvs(processor, higuchi, "Higuchi")
-    generate_evaluation_csvs(processor, logpower, "LogPower")
+    print("Running CSP + LogPower...")
+    for subject_id in tqdm(range(1, 10), desc="CSP + LogPower"):
+        df = pd.DataFrame(run_csp_logpower(subject_id))
+        os.makedirs("results/CSP_LogPower/Training", exist_ok=True)
+        df.to_csv(f"results/CSP_LogPower/Training/P{subject_id:02d}.csv", index=False)
 
-    # ==================== Executa CSP + Fractal ==================== #
-    for subject_id in tqdm(range(1, 10), desc="Running CSP + Fractal"):
-        rows = run_csp_fractal(subject_id)
-        df = pd.DataFrame(rows)
-        output_dir = "results/CSP_Fractal/Training"
-        os.makedirs(output_dir, exist_ok=True)
-        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
+    print("Running FBCSP + Fractal...")
+    for subject_id in tqdm(range(1, 10), desc="FBCSP + Fractal"):
+        df = pd.DataFrame(run_fbcsp_fractal(subject_id))
+        os.makedirs("results/FBCSP_Fractal/Training", exist_ok=True)
+        df.to_csv(f"results/FBCSP_Fractal/Training/P{subject_id:02d}.csv", index=False)
 
-    # ==================== Executa CSP + LogPower ==================== #
-    for subject_id in tqdm(range(1, 10), desc="Running CSP + LogPower"):
-        rows = run_csp_logpower(subject_id)
-        df = pd.DataFrame(rows)
-        output_dir = "results/CSP_LogPower/Training"
-        os.makedirs(output_dir, exist_ok=True)
-        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
-
-    # ==================== Executa FBCSP + Fractal ==================== #
-    for subject_id in tqdm(range(1, 10), desc="Running FBCSP + Fractal"):
-        rows = run_fbcsp_fractal(subject_id)
-        df = pd.DataFrame(rows)
-        output_dir = "results/FBCSP_Fractal/Training"
-        os.makedirs(output_dir, exist_ok=True)
-        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
-
-    # ==================== Executa FBCSP + LogPower ==================== #
-    for subject_id in tqdm(range(1, 10), desc="Running FBCSP + LogPower"):
-        rows = run_fbcsp_logpower(subject_id)
-        df = pd.DataFrame(rows)
-        output_dir = "results/FBCSP_LogPower/Training"
-        os.makedirs(output_dir, exist_ok=True)
-        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
-
-    # ==================== Logs finais organizados ==================== #
-    summaries = [
-        log_summary("Higuchi"),
-        log_summary("LogPower"),
-        log_summary("CSP_Fractal"),
-        log_summary("CSP_LogPower"),
-        log_summary("FBCSP_Fractal"),
-        log_summary("FBCSP_LogPower"),
-    ]
+    print("Running FBCSP + LogPower...")
+    for subject_id in tqdm(range(1, 10), desc="FBCSP + LogPower"):
+        df = pd.DataFrame(run_fbcsp_logpower(subject_id))
+        os.makedirs("results/FBCSP_LogPower/Training", exist_ok=True)
+        df.to_csv(f"results/FBCSP_LogPower/Training/P{subject_id:02d}.csv", index=False)
 
     print("\n=== RESUMO FINAL DOS MÉTODOS ===")
-    for summary in summaries:
-        print(summary)
+    for method in [
+        "Fractal",
+        "LogPower",
+        "CSP_Fractal",
+        "CSP_LogPower",
+        "FBCSP_Fractal",
+        "FBCSP_LogPower",
+    ]:
+        print(log_summary(method))
 
-    # ============== Teste estatístico final (Wilcoxon) ============== #
-    # ============= Compara o método de Hig com Logpower ============= #
     build_final_csv_and_wilcoxon()
 
 
