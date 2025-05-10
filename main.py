@@ -13,6 +13,7 @@ from methods.pipelines.csp_fractal import run_csp_fractal
 from utils.logs import log_summary
 from methods.pipelines.csp_logpower import run_csp_logpower
 from methods.pipelines.fbcsp_fractal import run_fbcsp_fractal
+from methods.pipelines.fbcsp_logpower import run_fbcsp_logpower
 
 
 class LogPowerWrapper:
@@ -158,10 +159,6 @@ def build_final_csv_and_wilcoxon():
     logpower_mean = df_final["LogPower"].mean()
     logpower_std = df_final["LogPower"].std()
 
-    print("\n=== Estatísticas descritivas ===")
-    print(f"Higuchi  -> Média: {higuchi_mean:.4f} | Desvio Padrão: {higuchi_std:.4f}")
-    print(f"LogPower -> Média: {logpower_mean:.4f} | Desvio Padrão: {logpower_std:.4f}")
-
     stat, p = wilcoxon(df_final["Higuchi"], df_final["LogPower"])
     print("\n=== Wilcoxon Test (40 CSVs combinados) ===")
     print(f"Statistic: {stat:.4f}")
@@ -218,22 +215,30 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
         df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
-    # ==================== Logs finais organizados ==================== #
-    from utils.logs import log_summary
+    # ==================== Executa FBCSP + LogPower ==================== #
+    for subject_id in tqdm(range(1, 10), desc="Running FBCSP + LogPower"):
+        rows = run_fbcsp_logpower(subject_id)
+        df = pd.DataFrame(rows)
+        output_dir = "results/FBCSP_LogPower/Training"
+        os.makedirs(output_dir, exist_ok=True)
+        df.to_csv(f"{output_dir}/P{subject_id:02d}.csv", index=False)
 
+    # ==================== Logs finais organizados ==================== #
     summaries = [
         log_summary("Higuchi"),
         log_summary("LogPower"),
         log_summary("CSP_Fractal"),
         log_summary("CSP_LogPower"),
         log_summary("FBCSP_Fractal"),
+        log_summary("FBCSP_LogPower"),
     ]
 
     print("\n=== RESUMO FINAL DOS MÉTODOS ===")
-    for s in summaries:
-        print(s)
+    for summary in summaries:
+        print(summary)
 
     # ============== Teste estatístico final (Wilcoxon) ============== #
+    # ============= Compara o método de Hig com Logpower ============= #
     build_final_csv_and_wilcoxon()
 
 

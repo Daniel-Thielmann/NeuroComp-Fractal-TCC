@@ -6,11 +6,11 @@ class HiguchiFractalEvolution:
     def __init__(self, kmax=10, bands=None, sfreq=512):
         self.kmax = kmax
         self.bands = bands or [
-            ('delta', 0.5, 4),
-            ('theta', 4, 8),
-            ('alpha', 8, 13),
-            ('beta', 13, 30),
-            ('gamma', 30, 40)
+            ("delta", 0.5, 4),
+            ("theta", 4, 8),
+            ("alpha", 8, 13),
+            ("beta", 13, 30),
+            ("gamma", 30, 40),
         ]
         self.sfreq = sfreq
         self.filter_bank = self._create_filter_bank()
@@ -19,7 +19,7 @@ class HiguchiFractalEvolution:
         filter_bank = {}
         nyq = 0.5 * self.sfreq
         for name, low, high in self.bands:
-            b, a = butter(4, [low / nyq, high / nyq], btype='band')
+            b, a = butter(4, [low / nyq, high / nyq], btype="band")
             filter_bank[name] = (b, a)
         return filter_bank
 
@@ -28,8 +28,9 @@ class HiguchiFractalEvolution:
         if n < 10:
             return 0.0, np.zeros(self.kmax)
 
-        scales = np.unique(np.logspace(0, np.log10(
-            min(self.kmax, n // 2)), num=10, dtype=int))
+        scales = np.unique(
+            np.logspace(0, np.log10(min(self.kmax, n // 2)), num=10, dtype=int)
+        )
         lk = np.zeros(len(scales))
         diff = np.abs(np.diff(signal))
 
@@ -61,7 +62,7 @@ class HiguchiFractalEvolution:
             np.mean(np.diff(phase)),
             np.std(np.diff(phase)),
             len(np.where(np.diff(np.sign(signal)))[0]) / len(signal),
-            np.max(amplitude) - np.min(amplitude)
+            np.max(amplitude) - np.min(amplitude),
         ]
         return features
 
@@ -77,7 +78,7 @@ class HiguchiFractalEvolution:
             spectral_features = [
                 np.log(np.mean(psd[mask]) + 1e-12),
                 -np.sum(psd[mask] * np.log(psd[mask] + 1e-12)),
-                freqs[mask][np.argmax(psd[mask])]
+                freqs[mask][np.argmax(psd[mask])],
             ]
         else:
             spectral_features = [0.0, 0.0, 0.0]
@@ -87,11 +88,11 @@ class HiguchiFractalEvolution:
 
     def extract(self, data):
         n_trials, n_channels, _ = data.shape
-        hfd_profile_len = len(np.unique(np.logspace(
-            0, np.log10(self.kmax), num=10, dtype=int)))
+        hfd_profile_len = len(
+            np.unique(np.logspace(0, np.log10(self.kmax), num=10, dtype=int))
+        )
         features_per_band = 1 + 3 + 6 + hfd_profile_len
-        X = np.zeros(
-            (n_trials, n_channels * len(self.bands) * features_per_band))
+        X = np.zeros((n_trials, n_channels * len(self.bands) * features_per_band))
 
         for i in range(n_trials):
             for j in range(n_channels):
@@ -99,7 +100,8 @@ class HiguchiFractalEvolution:
                     start = (j * len(self.bands) + k) * features_per_band
                     end = start + features_per_band
                     features = self._calculate_band_features(
-                        data[i, j, :], band_name, low, high)
+                        data[i, j, :], band_name, low, high
+                    )
                     X[i, start:end] = features[:features_per_band]
         return X
 
