@@ -18,34 +18,25 @@ def run_all():
 
     for subject_id in tqdm(range(1, 10), desc="FBCSP + Fractal"):
         rows = run_fbcsp_fractal(subject_id)
-
         df = pd.DataFrame(rows)
 
-        # ========== APLICA MELHORIAS AQUI ========== #
+        # ========= APLICA MELHORIAS AQUI ========= #
 
-        # baseline correction já foi aplicada nos sinais em run_fbcsp_fractal
-        # extração das features já foi feita; agora aplicamos scaler, PCA, QDA
-        features = df[
-            ["left_prob", "right_prob"]
-        ].values  # nesse estágio, esses são os scores brutos?
-        # Se você quiser rodar com features reais extraídas do Fractal em FBCSP, o pipeline deve ser alterado.
-        # Como você está lidando com arquivos já processados com probs, vamos apenas reavaliar o classificador aqui.
-
-        # Normalização + PCA
+        features = df[["left_prob", "right_prob"]].values
         X_feat = StandardScaler().fit_transform(features)
-        X_feat = PCA(n_components=min(2, X_feat.shape[1])).fit_transform(X_feat)
 
+        # Elimina colinearidade (sem warnings) via PCA(1)
+        X_feat = PCA(n_components=1).fit_transform(X_feat)
         y = df["true_label"].values
 
-        # Reaplica QDA no espaço reduzido
-        clf = QDA(reg_param=0.1)
+        clf = QDA(reg_param=0.1)  # QDA robusto
         clf.fit(X_feat, y)
         probs = clf.predict_proba(X_feat)
 
         df["left_prob"] = probs[:, 0]
         df["right_prob"] = probs[:, 1]
 
-        # ========================================== #
+        # ========================================= #
 
         os.makedirs("results/FBCSP_Fractal/Training", exist_ok=True)
         df.to_csv(f"results/FBCSP_Fractal/Training/P{subject_id:02d}.csv", index=False)

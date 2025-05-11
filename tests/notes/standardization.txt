@@ -1,0 +1,11 @@
+test_fractal.py → Fractal puro (Higuchi com PCA+QDA) 
+
+test_logpower.py → LogPower puro com LDA 
+
+test_csp_fractal.py → CSP + Fractal com LDA 
+
+test_csp_logpower.py → CSP + LogPower com QDA 
+
+test_fbcsp_fractal.py → FBCSP + Fractal com QDA+PCA 
+
+test_fbcsp_logpower.py → FBCSP + LogPower com QDA 

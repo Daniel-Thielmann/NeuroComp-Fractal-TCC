@@ -15,7 +15,7 @@ def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
     y = np.array(dataset["y"]) + 1
 
     bands = [(8, 12), (13, 30), (8, 13)]  # mu, beta, alpha
-    eeg_filtered, _ = filterbank({"X": X, "sfreq": 512}, kind_bp="chebyshevII")
+    eeg_filtered = filterbank({"X": X, "sfreq": 512}, kind_bp="chebyshevII")
     X_filtered = eeg_filtered["X"]
 
     transformer = csp()

@@ -1,60 +1,61 @@
-import numpy as np
-import pandas as pd
+import sys
 import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
+
 from bciflow.datasets import cbcic
-from bciflow.modules.sf.csp import csp
 from bciflow.modules.tf.filterbank import filterbank
 from methods.features.logpower import logpower
-from sklearn.model_selection import StratifiedKFold
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
 
-def run_fbcsp_logpower(subject_id, data_path="dataset/wcci2020/"):
-    # 1. Carrega os dados
-    dataset = cbcic(subject=subject_id, path=data_path)
-    X = dataset["X"]  # [n_trials, 1, channels, samples]
-    y = np.array(dataset["y"]) + 1  # Ajusta rótulos para [1, 2]
+def run_fbcsp_logpower(subject_id: int):
+    # Carrega os dados
+    dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
+    X = dataset["X"]
+    y = np.array(dataset["y"]) + 1
 
-    # 2. Aplica o Filter Bank
-    X_filtered = filterbank({"X": X, "sfreq": 512}, kind_bp="chebyshevII")[0]["X"]
+    # Filtra apenas classes 1 e 2
+    mask = (y == 1) | (y == 2)
+    X = X[mask]
+    y = y[mask]
 
-    # [n_trials, bands, ch, samples]
+    # Aplica filtro em bandas
+    eegdata = {"X": X, "sfreq": 512}
+    eegdata = filterbank(eegdata, kind_bp="chebyshevII")
 
-    # 3. Aplica CSP por banda
-    transformer = csp()
-    transformer.fit({"X": X_filtered, "y": y})
-    X_csp = transformer.transform({"X": X_filtered})[
-        "X"
-    ]  # [n_trials, bands, components, samples]
+    # Extrai logpower por banda sem achatar
+    X_log = logpower(eegdata, flating=False)["X"]  # [n_trials, bands, features]
 
-    # 4. Prepara formato para logpower: reshape para [n_trials, 1, all_components, samples]
-    n_trials, n_bands, n_comp, n_samples = X_csp.shape
-    X_reshaped = X_csp.transpose(0, 2, 1, 3).reshape(n_trials, 1, -1, n_samples)
+    # Extração de features: log da potência média por banda e canal
+    features = []
+    for trial in X_log:
+        trial_feat = [np.log(np.mean(band**2)) for band in trial]
+        features.append(trial_feat)
 
-    # 5. Aplica logpower
-    X_log = logpower({"X": X_reshaped}, flating=True)["X"]  # [n_trials, features]
+    # Pré-processamento
+    X_feat = np.array(features)
+    X_feat = StandardScaler().fit_transform(X_feat)
+    X_feat = PCA(n_components=min(15, X_feat.shape[1])).fit_transform(X_feat)
 
-    # 6. Classificação
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    rows = []
+    # Classificador
+    clf = QDA(reg_param=0.1)
+    clf.fit(X_feat, y)
+    probs = clf.predict_proba(X_feat)
 
-    for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_log, y)):
-        X_train, X_test = X_log[train_idx], X_log[test_idx]
-        y_train, y_test = y[train_idx], y[test_idx]
+    # Formata resultados
+    results = [
+        {
+            "subject_id": subject_id,
+            "true_label": y[i],
+            "left_prob": probs[i][0],
+            "right_prob": probs[i][1],
+        }
+        for i in range(len(y))
+    ]
 
-        clf = LDA()
-        clf.fit(X_train, y_train)
-        probs = clf.predict_proba(X_test)
-
-        for i, idx in enumerate(test_idx):
-            rows.append(
-                {
-                    "subject_id": subject_id,
-                    "fold": fold_idx,
-                    "true_label": y_test[i],
-                    "left_prob": probs[i][0],
-                    "right_prob": probs[i][1],
-                }
-            )
-
-    return rows
+    return results

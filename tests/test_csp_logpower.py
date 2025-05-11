@@ -1,5 +1,6 @@
 import sys
 import os
+from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import pandas as pd
@@ -9,7 +10,7 @@ from methods.pipelines.csp_logpower import run_csp_logpower
 def run_all():
     all_rows = []
 
-    for subject_id in range(1, 10):
+    for subject_id in tqdm(range(1, 10), desc="CSP_Logpower"):
         rows = run_csp_logpower(subject_id)
         df = pd.DataFrame(rows)
         os.makedirs("results/CSP_LogPower/Training", exist_ok=True)

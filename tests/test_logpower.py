@@ -1,8 +1,8 @@
 import sys
 import os
+from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
@@ -16,7 +16,7 @@ from methods.features.logpower import logpower
 def run_logpower_all():
     all_rows = []
 
-    for subject_id in range(1, 10):
+    for subject_id in tqdm(range(1, 10), desc="Logpower"):
         dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
         X = dataset["X"]  # [n_trials, 1, channels, samples]
         y = np.array(dataset["y"]) + 1
@@ -26,7 +26,7 @@ def run_logpower_all():
         X = X[mask]
         y = y[mask]
 
-        eegdata, _ = filterbank({"X": X, "sfreq": 512}, kind_bp="chebyshevII")
+        eegdata = filterbank(eegdata, kind_bp="chebyshevII")
         X_feat = logpower(eegdata, flating=True)["X"]
         X_feat = StandardScaler().fit_transform(X_feat)
 

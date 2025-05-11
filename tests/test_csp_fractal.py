@@ -1,5 +1,7 @@
 import sys
 import os
+from tqdm import tqdm
+
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -21,7 +23,7 @@ def run_csp_fractal_all():
     # Usando kmax=100 para extrair Fractal mais refinado
     hfd = HiguchiFractalEvolution(kmax=100)
 
-    for subject_id in range(1, 10):
+    for subject_id in tqdm(range(1, 10), desc="CSP_Fractal"):
         dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
         X = dataset["X"].squeeze(1)
         y = np.array(dataset["y"]) + 1

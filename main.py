@@ -105,7 +105,7 @@ def run_logpower():
         y = y[mask]
 
         eegdata = {"X": X, "sfreq": 512}
-        eegdata, _ = filterbank(eegdata, kind_bp="chebyshevII")
+        eegdata = filterbank(eegdata, kind_bp="chebyshevII")
         X_feat = logpower_fn(eegdata, flating=True)["X"]
         X_feat = StandardScaler().fit_transform(X_feat)
 

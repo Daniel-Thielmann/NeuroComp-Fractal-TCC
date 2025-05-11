@@ -1,50 +1,62 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
+
 from bciflow.datasets import cbcic
+from bciflow.modules.tf.filterbank import filterbank
 from bciflow.modules.sf.csp import csp
-from sklearn.model_selection import StratifiedKFold
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-from methods.features.logpower import logpower  # função correta
 
 
-def run_csp_logpower(subject_id, data_path="dataset/wcci2020/"):
-    dataset = cbcic(subject=subject_id, path=data_path)
-    X = dataset["X"].squeeze(1)  # [n_trials, channels, samples]
-    y = np.array(dataset["y"])
-    y = y + 1  # Corrige os rótulos de [0,1] para [1,2]
+def run_csp_logpower(subject_id: int):
+    dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
+    X = dataset["X"]
+    y = np.array(dataset["y"]) + 1
 
-    X_band = np.expand_dims(X, axis=1)  # [n_trials, 1, channels, samples]
+    # Filtra classes 1 e 2
+    mask = (y == 1) | (y == 2)
+    X = X[mask]
+    y = y[mask]
+
+    # Filtro em bandas — mantém formato original [trials, bands, channels, samples]
+    eegdata = {"X": X, "sfreq": 512}
+    eegdata = filterbank(eegdata, kind_bp="chebyshevII")
+    X_band = eegdata["X"]
+
+    # Aplica CSP
     transformer = csp()
     transformer.fit({"X": X_band, "y": y})
-    X_csp = transformer.transform({"X": X_band})["X"][
-        :, 0
-    ]  # [n_trials, components, samples]
-
-    # Recoloca banda para reutilizar a função logpower (espera [n_trials, bands, channels, samples])
-    X_reformatted = np.expand_dims(X_csp, axis=1)
-    X_log = logpower({"X": X_reformatted}, flating=True)[
+    X_csp = transformer.transform({"X": X_band})[
         "X"
-    ]  # resultado: [n_trials, n_components]
+    ]  # [n_trials, bands, components, samples]
 
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    rows = []
+    # Extrai features: log da potência média por componente
+    features = []
+    for trial in X_csp:
+        trial_feat = [np.log(np.mean(comp**2)) for band in trial for comp in band]
+        features.append(trial_feat)
 
-    for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_log, y)):
-        X_train, X_test = X_log[train_idx], X_log[test_idx]
-        y_train, y_test = y[train_idx], y[test_idx]
+    X_feat = np.array(features)
+    X_feat = StandardScaler().fit_transform(X_feat)
+    X_feat = PCA(n_components=min(15, X_feat.shape[1])).fit_transform(X_feat)
 
-        clf = LDA()
-        clf.fit(X_train, y_train)
-        probs = clf.predict_proba(X_test)
+    clf = QDA(reg_param=0.1)
+    clf.fit(X_feat, y)
+    probs = clf.predict_proba(X_feat)
 
-        for i, idx in enumerate(test_idx):
-            rows.append(
-                {
-                    "subject_id": subject_id,
-                    "fold": fold_idx,
-                    "true_label": y_test[i],
-                    "left_prob": probs[i][0],
-                    "right_prob": probs[i][1],
-                }
-            )
+    results = [
+        {
+            "subject_id": subject_id,
+            "true_label": y[i],
+            "left_prob": probs[i][0],
+            "right_prob": probs[i][1],
+        }
+        for i in range(len(y))
+    ]
 
-    return rows
+    return results
