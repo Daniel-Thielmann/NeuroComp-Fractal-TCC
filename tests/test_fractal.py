@@ -1,47 +1,56 @@
-import sys
 import os
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-import pandas as pd
+import sys
 import numpy as np
+import pandas as pd
+from tqdm import tqdm
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
 
-# Usando LDA para obter melhor acurácia
+# Usando QDA para obter a melhor acurácia
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from bciflow.datasets import cbcic
-from bciflow.modules.sf.csp import csp
 from methods.features.fractal import HiguchiFractalEvolution
 
+# Canais disponíveis nos arquivos .mat
+eeg_channels = [
+    "F3",
+    "FC3",
+    "C3",
+    "CP3",
+    "P3",
+    "FCz",
+    "CPz",
+    "F4",
+    "FC4",
+    "C4",
+    "CP4",
+    "P4",
+]
 
-def run_csp_fractal_all():
+
+def run_all():
     all_rows = []
-
-    # Usando kmax=100 para extrair Fractal mais refinado
     hfd = HiguchiFractalEvolution(kmax=100)
 
-    for subject_id in range(1, 10):
+    # Seleção dos canais motores válidos entre os 12 disponíveis
+    selected_channels = ["C3", "C4", "CP3", "CP4", "FC3", "FC4", "CPz", "FCz"]
+    selected_indices = [
+        i for i, ch in enumerate(eeg_channels) if ch in selected_channels
+    ]
+
+    for subject_id in tqdm(range(1, 10), desc="Fractal"):
         dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
         X = dataset["X"].squeeze(1)
         y = np.array(dataset["y"]) + 1
 
-        # Foco apenas em labels 1 e 2
         mask = (y == 1) | (y == 2)
-        X = X[mask]
+        X = X[mask][:, selected_indices, :]
         y = y[mask]
 
-        # Aplica CSP para extrair componentes espaciais
-        X_band = np.expand_dims(X, axis=1)  # [n_trials, 1, channels, samples]
-        transformer = csp()
-        transformer.fit({"X": X_band, "y": y})
-        X_csp = transformer.transform({"X": X_band})["X"][
-            :, 0
-        ]  # [n_trials, components, samples]
-
-        # Calcula Higuchi Fractal para cada componente CSP
         features = []
-        for trial in X_csp:
+        for trial in X:
             trial_feat = []
             for comp in trial:
                 comp = comp - np.mean(comp)  # baseline correction
@@ -49,17 +58,16 @@ def run_csp_fractal_all():
                 trial_feat.extend([slope, mean_lk, std_lk])
             features.append(trial_feat)
 
-        # Padroniza as features
         X_feat = np.array(features)
         X_feat = StandardScaler().fit_transform(X_feat)
+        X_feat = PCA(n_components=15).fit_transform(X_feat)
 
-        # Classificação com LDA (melhor desempenho para CSP+Fractal)
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
             X_train, X_test = X_feat[train_idx], X_feat[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
 
-            clf = LDA()
+            clf = QDA()  # Versão que funcionou melhor
             clf.fit(X_train, y_train)
             probs = clf.predict_proba(X_test)
 
@@ -74,18 +82,15 @@ def run_csp_fractal_all():
                     }
                 )
 
-        # Salva CSV por sujeito
         df_sub = pd.DataFrame([r for r in all_rows if r["subject_id"] == subject_id])
-        os.makedirs("results/CSP_Fractal/Training", exist_ok=True)
-        df_sub.to_csv(
-            f"results/CSP_Fractal/Training/P{subject_id:02d}.csv", index=False
-        )
+        os.makedirs("results/Fractal/Training", exist_ok=True)
+        df_sub.to_csv(f"results/Fractal/Training/P{subject_id:02d}.csv", index=False)
 
     return pd.DataFrame(all_rows)
 
 
 if __name__ == "__main__":
-    df = run_csp_fractal_all()
+    df = run_all()
     df["correct_prob"] = df.apply(
         lambda row: row["left_prob"] if row["true_label"] == 1 else row["right_prob"],
         axis=1,
@@ -94,6 +99,7 @@ if __name__ == "__main__":
     mean_prob = df["correct_prob"].mean()
     total = len(df)
     counts = dict(df["true_label"].value_counts().sort_index())
+
     print(
         f"Acurácia: {acc:.4f} | Média Prob. Correta: {mean_prob:.4f} | Amostras: {total} | Rótulos: {counts}"
     )

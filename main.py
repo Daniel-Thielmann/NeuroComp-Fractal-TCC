@@ -7,7 +7,8 @@ from scipy.stats import wilcoxon
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
+from sklearn.decomposition import PCA
 from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
 from methods.features.logpower import logpower as logpower_fn
@@ -23,25 +24,55 @@ os.makedirs("results/summaries", exist_ok=True)
 # ================== Roda método Fractal (ex-Higuchi) ================== #
 def run_fractal():
     all_rows = []
-    extractor = HiguchiFractalEvolution(kmax=80)
+    hfd = HiguchiFractalEvolution(kmax=100)
 
-    for subject_id in range(1, 10):
+    eeg_channels = [
+        "F3",
+        "FC3",
+        "C3",
+        "CP3",
+        "P3",
+        "FCz",
+        "CPz",
+        "F4",
+        "FC4",
+        "C4",
+        "CP4",
+        "P4",
+    ]
+    selected_channels = ["C3", "C4", "CP3", "CP4", "FC3", "FC4", "CPz", "FCz"]
+    selected_indices = [
+        i for i, ch in enumerate(eeg_channels) if ch in selected_channels
+    ]
+
+    for subject_id in tqdm(range(1, 10), desc="Fractal"):
         dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
         X = dataset["X"].squeeze(1)
         y = np.array(dataset["y"]) + 1
 
         mask = (y == 1) | (y == 2)
-        X = X[mask]
+        X = X[mask][:, selected_indices, :]
         y = y[mask]
 
-        X_feat = extractor.extract(X)
+        features = []
+        for trial in X:
+            trial_feat = []
+            for comp in trial:
+                comp = comp - np.mean(comp)  # baseline correction
+                slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
+                trial_feat.extend([slope, mean_lk, std_lk])
+            features.append(trial_feat)
+
+        X_feat = np.array(features)
         X_feat = StandardScaler().fit_transform(X_feat)
+        X_feat = PCA(n_components=min(15, X_feat.shape[1])).fit_transform(X_feat)
 
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
-            clf = LDA()
+            clf = QDA()
             clf.fit(X_feat[train_idx], y[train_idx])
             probs = clf.predict_proba(X_feat[test_idx])
+
             for i, idx in enumerate(test_idx):
                 all_rows.append(
                     {
@@ -64,7 +95,7 @@ def run_fractal():
 def run_logpower():
     all_rows = []
 
-    for subject_id in range(1, 10):
+    for subject_id in tqdm(range(1, 10), desc="LogPower"):
         dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
         X = dataset["X"]
         y = np.array(dataset["y"]) + 1

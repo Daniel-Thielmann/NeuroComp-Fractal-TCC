@@ -3,57 +3,33 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-
-# Usando LDA para obter melhor acurácia
 from bciflow.datasets import cbcic
-from bciflow.modules.sf.csp import csp
-from methods.features.fractal import HiguchiFractalEvolution
+from bciflow.modules.tf.filterbank import filterbank
+from methods.features.logpower import logpower
 
 
-def run_csp_fractal_all():
+def run_logpower_all():
     all_rows = []
-
-    # Usando kmax=100 para extrair Fractal mais refinado
-    hfd = HiguchiFractalEvolution(kmax=100)
 
     for subject_id in range(1, 10):
         dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
-        X = dataset["X"].squeeze(1)
+        X = dataset["X"]  # [n_trials, 1, channels, samples]
         y = np.array(dataset["y"]) + 1
 
-        # Foco apenas em labels 1 e 2
+        # Filtra labels 1 e 2
         mask = (y == 1) | (y == 2)
         X = X[mask]
         y = y[mask]
 
-        # Aplica CSP para extrair componentes espaciais
-        X_band = np.expand_dims(X, axis=1)  # [n_trials, 1, channels, samples]
-        transformer = csp()
-        transformer.fit({"X": X_band, "y": y})
-        X_csp = transformer.transform({"X": X_band})["X"][
-            :, 0
-        ]  # [n_trials, components, samples]
-
-        # Calcula Higuchi Fractal para cada componente CSP
-        features = []
-        for trial in X_csp:
-            trial_feat = []
-            for comp in trial:
-                comp = comp - np.mean(comp)  # baseline correction
-                slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
-                trial_feat.extend([slope, mean_lk, std_lk])
-            features.append(trial_feat)
-
-        # Padroniza as features
-        X_feat = np.array(features)
+        eegdata, _ = filterbank({"X": X, "sfreq": 512}, kind_bp="chebyshevII")
+        X_feat = logpower(eegdata, flating=True)["X"]
         X_feat = StandardScaler().fit_transform(X_feat)
 
-        # Classificação com LDA (melhor desempenho para CSP+Fractal)
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
             X_train, X_test = X_feat[train_idx], X_feat[test_idx]
@@ -76,16 +52,14 @@ def run_csp_fractal_all():
 
         # Salva CSV por sujeito
         df_sub = pd.DataFrame([r for r in all_rows if r["subject_id"] == subject_id])
-        os.makedirs("results/CSP_Fractal/Training", exist_ok=True)
-        df_sub.to_csv(
-            f"results/CSP_Fractal/Training/P{subject_id:02d}.csv", index=False
-        )
+        os.makedirs("results/LogPower/Training", exist_ok=True)
+        df_sub.to_csv(f"results/LogPower/Training/P{subject_id:02d}.csv", index=False)
 
     return pd.DataFrame(all_rows)
 
 
 if __name__ == "__main__":
-    df = run_csp_fractal_all()
+    df = run_logpower_all()
     df["correct_prob"] = df.apply(
         lambda row: row["left_prob"] if row["true_label"] == 1 else row["right_prob"],
         axis=1,
