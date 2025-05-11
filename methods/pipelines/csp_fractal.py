@@ -4,6 +4,7 @@ from bciflow.modules.sf.csp import csp
 from sklearn.model_selection import StratifiedKFold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.preprocessing import RobustScaler
+from sklearn.decomposition import PCA
 from methods.features.fractal import HiguchiFractalEvolution
 
 
@@ -27,8 +28,10 @@ def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
         fd_features.append(trial_feat)
     fd_features = np.array(fd_features)
 
-    scaler = RobustScaler()
-    fd_features = scaler.fit_transform(fd_features)
+    fd_features = RobustScaler().fit_transform(fd_features)
+    fd_features = PCA(n_components=min(15, fd_features.shape[1])).fit_transform(
+        fd_features
+    )
 
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     rows = []

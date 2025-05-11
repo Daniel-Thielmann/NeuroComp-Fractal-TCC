@@ -164,20 +164,37 @@ def build_final_csv_and_wilcoxon():
             all_probs.extend(df.apply(extract_correct_prob, axis=1))
         return all_probs
 
-    fractal_vals = load_all("Fractal")
-    logpower_vals = load_all("LogPower")
+    comparisons = [
+        ("Fractal", "LogPower"),
+        ("CSP_Fractal", "CSP_LogPower"),
+        ("FBCSP_Fractal", "FBCSP_LogPower"),
+    ]
 
-    df_final = pd.DataFrame({"Fractal": fractal_vals, "LogPower": logpower_vals})
-    df_final.to_csv("results/summaries/fractal_vs_logpower_comparison.csv", index=False)
+    os.makedirs("results/summaries", exist_ok=True)
 
-    stat, p = wilcoxon(df_final["Fractal"], df_final["LogPower"])
-    print("\n=== Wilcoxon Test (Fractal vs LogPower) ===")
-    print(f"Statistic: {stat:.4f}")
-    print(f"P-value : {p:.4f}")
-    if p < 0.05:
-        print("Conclusão: Diferença significativa entre os métodos")
-    else:
-        print("Conclusão: Não há diferença significativa entre os métodos")
+    for m1, m2 in comparisons:
+        print(f"\n=== Wilcoxon Test ({m1} vs {m2}) ===")
+        vals1 = load_all(m1)
+        vals2 = load_all(m2)
+
+        # Garante mesmo tamanho para o teste (caso falte algum arquivo)
+        min_len = min(len(vals1), len(vals2))
+        vals1 = vals1[:min_len]
+        vals2 = vals2[:min_len]
+
+        df_comp = pd.DataFrame({m1: vals1, m2: vals2})
+        df_comp.to_csv(f"results/summaries/{m1}_vs_{m2}_comparison.csv", index=False)
+
+        stat, p = wilcoxon(df_comp[m1], df_comp[m2])
+        print(f"Statistic: {stat:.4f}")
+        if p < 1e-4:
+            print(f"P-value  : {p:.2e}")
+        else:
+            print(f"P-value  : {p:.4f}")
+        if p < 0.05:
+            print("Conclusão: Diferença significativa entre os métodos")
+        else:
+            print("Conclusão: Não há diferença significativa entre os métodos")
 
 
 # =================== Execução =================== #

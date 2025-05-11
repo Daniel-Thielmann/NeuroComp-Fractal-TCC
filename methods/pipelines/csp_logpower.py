@@ -4,9 +4,11 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 import numpy as np
+import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
+from sklearn.model_selection import StratifiedKFold
 
 from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
@@ -23,17 +25,16 @@ def run_csp_logpower(subject_id: int):
     X = X[mask]
     y = y[mask]
 
-    # Filtro em bandas — mantém formato original [trials, bands, channels, samples]
     eegdata = {"X": X, "sfreq": 512}
     eegdata = filterbank(eegdata, kind_bp="chebyshevII")
-    X_band = eegdata["X"]
+    X_band = eegdata["X"]  # [trials, bands, channels, samples]
 
     # Aplica CSP
     transformer = csp()
     transformer.fit({"X": X_band, "y": y})
     X_csp = transformer.transform({"X": X_band})[
         "X"
-    ]  # [n_trials, bands, components, samples]
+    ]  # [trials, bands, components, samples]
 
     # Extrai features: log da potência média por componente
     features = []
@@ -45,18 +46,23 @@ def run_csp_logpower(subject_id: int):
     X_feat = StandardScaler().fit_transform(X_feat)
     X_feat = PCA(n_components=min(15, X_feat.shape[1])).fit_transform(X_feat)
 
-    clf = QDA(reg_param=0.1)
-    clf.fit(X_feat, y)
-    probs = clf.predict_proba(X_feat)
+    # Validação cruzada para evitar overfitting
+    results = []
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
+        clf = QDA(reg_param=0.1)
+        clf.fit(X_feat[train_idx], y[train_idx])
+        probs = clf.predict_proba(X_feat[test_idx])
 
-    results = [
-        {
-            "subject_id": subject_id,
-            "true_label": y[i],
-            "left_prob": probs[i][0],
-            "right_prob": probs[i][1],
-        }
-        for i in range(len(y))
-    ]
+        for i, idx in enumerate(test_idx):
+            results.append(
+                {
+                    "subject_id": subject_id,
+                    "fold": fold_idx,
+                    "true_label": y[idx],
+                    "left_prob": probs[i][0],
+                    "right_prob": probs[i][1],
+                }
+            )
 
     return results
