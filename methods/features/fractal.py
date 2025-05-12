@@ -1,11 +1,18 @@
+
 import numpy as np
 from scipy.signal import welch, butter, filtfilt, hilbert
 
 
 class HiguchiFractalEvolution:
-    def __init__(self, kmax=80, bands=None, sfreq=512):
+    def __init__(self, kmax=10, bands=None, sfreq=512):
         self.kmax = kmax
-        self.bands = bands or [("theta", 4, 8), ("alpha", 8, 13), ("beta", 13, 30)]
+        self.bands = bands or [
+            ('delta', 0.5, 4),
+            ('theta', 4, 8),
+            ('alpha', 8, 13),
+            ('beta', 13, 30),
+            ('gamma', 30, 40)
+        ]
         self.sfreq = sfreq
         self.filter_bank = self._create_filter_bank()
 
@@ -13,18 +20,17 @@ class HiguchiFractalEvolution:
         filter_bank = {}
         nyq = 0.5 * self.sfreq
         for name, low, high in self.bands:
-            b, a = butter(4, [low / nyq, high / nyq], btype="band")
+            b, a = butter(4, [low / nyq, high / nyq], btype='band')
             filter_bank[name] = (b, a)
         return filter_bank
 
     def _calculate_enhanced_hfd(self, signal):
         n = len(signal)
         if n < 10:
-            return 0.0, 0.0, 0.0
+            return 0.0, np.zeros(self.kmax)
 
-        scales = np.unique(
-            np.logspace(0, np.log10(min(self.kmax, n // 2)), num=10, dtype=int)
-        )
+        scales = np.unique(np.logspace(0, np.log10(
+            min(self.kmax, n // 2)), num=10, dtype=int))
         lk = np.zeros(len(scales))
         diff = np.abs(np.diff(signal))
 
@@ -40,23 +46,60 @@ class HiguchiFractalEvolution:
 
         valid = (lk != 0) & ~np.isinf(lk)
         if np.sum(valid) < 2:
-            return 0.0, 0.0, 0.0
+            return 0.0, lk
 
-        slope = np.polyfit(np.log(1.0 / scales[valid]), lk[valid], 1)[0]
-        return slope, np.mean(lk[valid]), np.std(lk[valid])
+        hfd = np.polyfit(np.log(1.0 / scales[valid]), lk[valid], 1)[0]
+        return hfd, lk
+
+    def _extract_time_domain_features(self, signal):
+        analytic_signal = hilbert(signal)
+        amplitude = np.abs(analytic_signal)
+        phase = np.unwrap(np.angle(analytic_signal))
+
+        features = [
+            np.mean(amplitude),
+            np.std(amplitude),
+            np.mean(np.diff(phase)),
+            np.std(np.diff(phase)),
+            len(np.where(np.diff(np.sign(signal)))[0]) / len(signal),
+            np.max(amplitude) - np.min(amplitude)
+        ]
+        return features
+
+    def _calculate_band_features(self, signal, band_name, low, high):
+        b, a = self.filter_bank[band_name]
+        filtered = filtfilt(b, a, signal)
+        hfd, hfd_profile = self._calculate_enhanced_hfd(filtered)
+
+        freqs, psd = welch(filtered, fs=self.sfreq, nperseg=128)
+        mask = (freqs >= low) & (freqs <= high)
+
+        if np.any(mask):
+            spectral_features = [
+                np.log(np.mean(psd[mask]) + 1e-12),
+                -np.sum(psd[mask] * np.log(psd[mask] + 1e-12)),
+                freqs[mask][np.argmax(psd[mask])]
+            ]
+        else:
+            spectral_features = [0.0, 0.0, 0.0]
+
+        time_features = self._extract_time_domain_features(filtered)
+        return [hfd] + spectral_features + time_features + list(hfd_profile)
 
     def extract(self, data):
         n_trials, n_channels, _ = data.shape
-        n_features_per_band = 3  # slope, mean, std
-        total_features = n_channels * len(self.bands) * n_features_per_band
-        X = np.zeros((n_trials, total_features))
+        hfd_profile_len = len(np.unique(np.logspace(
+            0, np.log10(self.kmax), num=10, dtype=int)))
+        features_per_band = 1 + 3 + 6 + hfd_profile_len
+        X = np.zeros(
+            (n_trials, n_channels * len(self.bands) * features_per_band))
 
         for i in range(n_trials):
             for j in range(n_channels):
                 for k, (band_name, low, high) in enumerate(self.bands):
-                    b, a = self.filter_bank[band_name]
-                    filtered = filtfilt(b, a, data[i, j, :])
-                    slope, mean_lk, std_lk = self._calculate_enhanced_hfd(filtered)
-                    idx = (j * len(self.bands) + k) * n_features_per_band
-                    X[i, idx : idx + 3] = [slope, mean_lk, std_lk]
+                    start = (j * len(self.bands) + k) * features_per_band
+                    end = start + features_per_band
+                    features = self._calculate_band_features(
+                        data[i, j, :], band_name, low, high)
+                    X[i, start:end] = features[:features_per_band]
         return X
