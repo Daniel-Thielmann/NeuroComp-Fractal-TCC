@@ -14,7 +14,6 @@ from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
 from methods.features.logpower import logpower
 
-
 def run_fbcsp_logpower(subject_id: int):
     dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
     X = dataset["X"]
@@ -26,12 +25,27 @@ def run_fbcsp_logpower(subject_id: int):
     y = y[mask]
 
     eegdata = {"X": X, "sfreq": 512}
-    eegdata = filterbank(eegdata, kind_bp="chebyshevII")
-    X_log = logpower(eegdata, flating=False)["X"]
+    eegdata, _ = filterbank(eegdata, kind_bp="chebyshevII")
+
+    X_filt = eegdata["X"]
+
+    if X_filt.ndim == 5:
+        # (trials, bands, channels, filters, samples)
+        n_trials, n_bands, n_chans, n_filters, n_samples = X_filt.shape
+        X_reshaped = X_filt.transpose(0, 1, 3, 2, 4).reshape(n_trials, n_bands * n_filters * n_chans, n_samples)
+    elif X_filt.ndim == 4:
+        # (trials, bands, channels, samples)
+        n_trials, n_bands, n_chans, n_samples = X_filt.shape
+        X_reshaped = X_filt.reshape(n_trials, n_bands * n_chans, n_samples)
+    else:
+        raise ValueError(f"Shape inesperado após filterbank: {X_filt.shape}")
+
+    # Extrai logpower
+    X_log = logpower(sfreq=512).extract(X_reshaped)
 
     features = []
     for trial in X_log:
-        trial_feat = [np.log(np.mean(band**2)) for band in trial]
+        trial_feat = [np.log(np.mean(np.square(val))) for val in trial]
         features.append(trial_feat)
 
     X_feat = np.array(features)

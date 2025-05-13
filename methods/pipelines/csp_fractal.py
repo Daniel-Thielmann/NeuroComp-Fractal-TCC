@@ -23,15 +23,15 @@ def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
     for trial in X_csp:
         trial_feat = []
         for comp in trial:
-            slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
+            slope, lk_profile = hfd._calculate_enhanced_hfd(comp)
+            mean_lk = np.mean(lk_profile)
+            std_lk = np.std(lk_profile)
             trial_feat.extend([slope, mean_lk, std_lk])
         fd_features.append(trial_feat)
     fd_features = np.array(fd_features)
 
     fd_features = RobustScaler().fit_transform(fd_features)
-    fd_features = PCA(n_components=min(15, fd_features.shape[1])).fit_transform(
-        fd_features
-    )
+    fd_features = PCA(n_components=min(15, fd_features.shape[1])).fit_transform(fd_features)
 
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     rows = []

@@ -14,8 +14,7 @@ def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
     X = dataset["X"]
     y = np.array(dataset["y"]) + 1
 
-    bands = [(8, 12), (13, 30), (8, 13)]  # mu, beta, alpha
-    eeg_filtered = filterbank({"X": X, "sfreq": 512}, kind_bp="chebyshevII")
+    eeg_filtered, _ = filterbank({"X": X, "sfreq": 512}, kind_bp="chebyshevII")
     X_filtered = eeg_filtered["X"]
 
     transformer = csp()
@@ -28,7 +27,9 @@ def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
         trial_feat = []
         for band in trial:
             for comp in band:
-                slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
+                slope, lk_profile = hfd._calculate_enhanced_hfd(comp)
+                mean_lk = np.mean(lk_profile)
+                std_lk = np.std(lk_profile)
                 trial_feat.extend([slope, mean_lk, std_lk])
         features.append(trial_feat)
     features = np.array(features)

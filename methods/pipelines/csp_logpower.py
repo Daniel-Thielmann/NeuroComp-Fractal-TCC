@@ -26,8 +26,9 @@ def run_csp_logpower(subject_id: int):
     y = y[mask]
 
     eegdata = {"X": X, "sfreq": 512}
-    eegdata = filterbank(eegdata, kind_bp="chebyshevII")
-    X_band = eegdata["X"]  # [trials, bands, channels, samples]
+    eegdata, _ = filterbank(eegdata, kind_bp="chebyshevII")
+    X_band = eegdata["X"]
+
 
     # Aplica CSP
     transformer = csp()
