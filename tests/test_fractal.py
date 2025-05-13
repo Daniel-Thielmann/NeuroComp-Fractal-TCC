@@ -100,6 +100,10 @@ if __name__ == "__main__":
     total = len(df)
     counts = dict(df["true_label"].value_counts().sort_index())
 
+    # Média Probabilidade Correta: média das probabilidades atribuídas à classe verdadeira pelo modelo, independentemente de acertar ou não.
+    # A média dessas probabilidades mostra o quanto o modelo confia na classe certa, mesmo quando erra a classificação final.
+    # Use a média da probabilidade correta para saber o quão confiante e calibrado está o modelo, mesmo nos erros.
+
     print(
         f"Acurácia: {acc:.4f} | Média Prob. Correta: {mean_prob:.4f} | Amostras: {total} | Rótulos: {counts}"
     )

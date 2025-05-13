@@ -9,3 +9,14 @@ test_csp_logpower.py → CSP + LogPower com QDA
 test_fbcsp_fractal.py → FBCSP + Fractal com QDA+PCA 
 
 test_fbcsp_logpower.py → FBCSP + LogPower com QDA 
+
+
+
+
+### usar só o LDA para fazer todos os testes! 
+### gerar os 40 csvs para os metodos pipeline!
+### trocar o accuracy_per subject para histograma!
+
+### ponto mais importante do trabalho:
+### tabela com cada linha um sujeito, e as colunas vão ser sujeito, logo depois os métodos, uma tabela com 11 linhas e 7 colunas, na pos de cada um deles colocar o kappa (tipo uma acuracia + eficiente). calcular kappa juntando resultados de evaluate e training, um kappa por pessoa.
+
