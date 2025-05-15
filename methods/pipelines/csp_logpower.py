@@ -6,9 +6,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
 from sklearn.model_selection import StratifiedKFold
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
 from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
@@ -29,13 +28,10 @@ def run_csp_logpower(subject_id: int):
     eegdata, _ = filterbank(eegdata, kind_bp="chebyshevII")
     X_band = eegdata["X"]
 
-
     # Aplica CSP
     transformer = csp()
     transformer.fit({"X": X_band, "y": y})
-    X_csp = transformer.transform({"X": X_band})[
-        "X"
-    ]  # [trials, bands, components, samples]
+    X_csp = transformer.transform({"X": X_band})["X"]  # [trials, bands, components, samples]
 
     # Extrai features: log da potência média por componente
     features = []
@@ -45,13 +41,12 @@ def run_csp_logpower(subject_id: int):
 
     X_feat = np.array(features)
     X_feat = StandardScaler().fit_transform(X_feat)
-    X_feat = PCA(n_components=min(15, X_feat.shape[1])).fit_transform(X_feat)
 
     # Validação cruzada para evitar overfitting
     results = []
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
-        clf = QDA(reg_param=0.1)
+        clf = LDA()
         clf.fit(X_feat[train_idx], y[train_idx])
         probs = clf.predict_proba(X_feat[test_idx])
 

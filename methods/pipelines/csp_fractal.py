@@ -2,11 +2,9 @@ import numpy as np
 from bciflow.datasets import cbcic
 from bciflow.modules.sf.csp import csp
 from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-from sklearn.preprocessing import RobustScaler
-from sklearn.decomposition import PCA
 from methods.features.fractal import HiguchiFractalEvolution
-
 
 def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
     dataset = cbcic(subject=subject_id, path=data_path)
@@ -18,20 +16,18 @@ def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
     transformer.fit({"X": X_band, "y": y})
     X_csp = transformer.transform({"X": X_band})["X"][:, 0]
 
-    hfd = HiguchiFractalEvolution(kmax=80)
+    hfd = HiguchiFractalEvolution(kmax=100)
     fd_features = []
     for trial in X_csp:
         trial_feat = []
         for comp in trial:
-            slope, lk_profile = hfd._calculate_enhanced_hfd(comp)
-            mean_lk = np.mean(lk_profile)
-            std_lk = np.std(lk_profile)
+            comp = comp - np.mean(comp)
+            slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
             trial_feat.extend([slope, mean_lk, std_lk])
         fd_features.append(trial_feat)
     fd_features = np.array(fd_features)
 
-    fd_features = RobustScaler().fit_transform(fd_features)
-    fd_features = PCA(n_components=min(15, fd_features.shape[1])).fit_transform(fd_features)
+    fd_features = StandardScaler().fit_transform(fd_features)
 
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     rows = []
@@ -45,14 +41,12 @@ def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
         probs = clf.predict_proba(X_test)
 
         for i, idx in enumerate(test_idx):
-            rows.append(
-                {
-                    "subject_id": subject_id,
-                    "fold": fold_idx,
-                    "true_label": y_test[i],
-                    "left_prob": probs[i][0],
-                    "right_prob": probs[i][1],
-                }
-            )
+            rows.append({
+                "subject_id": subject_id,
+                "fold": fold_idx,
+                "true_label": y_test[i],
+                "left_prob": probs[i][0],
+                "right_prob": probs[i][1],
+            })
 
     return rows

@@ -6,9 +6,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
 from sklearn.model_selection import StratifiedKFold
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
 from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
@@ -30,17 +29,14 @@ def run_fbcsp_logpower(subject_id: int):
     X_filt = eegdata["X"]
 
     if X_filt.ndim == 5:
-        # (trials, bands, channels, filters, samples)
         n_trials, n_bands, n_chans, n_filters, n_samples = X_filt.shape
         X_reshaped = X_filt.transpose(0, 1, 3, 2, 4).reshape(n_trials, n_bands * n_filters * n_chans, n_samples)
     elif X_filt.ndim == 4:
-        # (trials, bands, channels, samples)
         n_trials, n_bands, n_chans, n_samples = X_filt.shape
         X_reshaped = X_filt.reshape(n_trials, n_bands * n_chans, n_samples)
     else:
         raise ValueError(f"Shape inesperado após filterbank: {X_filt.shape}")
 
-    # Extrai logpower
     X_log = logpower(sfreq=512).extract(X_reshaped)
 
     features = []
@@ -50,12 +46,11 @@ def run_fbcsp_logpower(subject_id: int):
 
     X_feat = np.array(features)
     X_feat = StandardScaler().fit_transform(X_feat)
-    X_feat = PCA(n_components=min(15, X_feat.shape[1])).fit_transform(X_feat)
 
     results = []
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
-        clf = QDA(reg_param=0.1)
+        clf = LDA()
         clf.fit(X_feat[train_idx], y[train_idx])
         probs = clf.predict_proba(X_feat[test_idx])
 

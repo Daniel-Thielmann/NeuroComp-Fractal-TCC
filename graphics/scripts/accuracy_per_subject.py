@@ -1,21 +1,22 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 os.makedirs("graphics/results", exist_ok=True)
 
 subjects = [f"P{i:02d}" for i in range(1, 11)]
-higuchi_means = []
+fractal_means = []
 logpower_means = []
 
 for i in range(1, 11):
-    higuchi_path = f"results/Higuchi/Training/P{i:02d}.csv"
+    fractal_path = f"results/Fractal/Training/P{i:02d}.csv"
     logpower_path = f"results/LogPower/Training/P{i:02d}.csv"
 
-    hig_df = pd.read_csv(higuchi_path)
+    fractal_df = pd.read_csv(fractal_path)
     log_df = pd.read_csv(logpower_path)
 
-    hig_df["correct_prob"] = hig_df.apply(
+    fractal_df["correct_prob"] = fractal_df.apply(
         lambda row: row["left_prob"] if row["true_label"] == 1 else row["right_prob"],
         axis=1,
     )
@@ -24,22 +25,27 @@ for i in range(1, 11):
         axis=1,
     )
 
-    higuchi_means.append(hig_df["correct_prob"].mean())
+    fractal_means.append(fractal_df["correct_prob"].mean())
     logpower_means.append(log_df["correct_prob"].mean())
 
+x = np.arange(len(subjects))  # posições dos sujeitos
+width = 0.35  # largura das barras
+
 plt.figure(figsize=(10, 6))
-plt.plot(subjects, higuchi_means, marker="o", label="Higuchi", color="blue")
-plt.plot(subjects, logpower_means, marker="s", label="LogPower", color="red")
-plt.title("Acurácia Média por Sujeito - Higuchi vs LogPower")
+plt.bar(x - width/2, fractal_means, width, label="Fractal", color="blue")
+plt.bar(x + width/2, logpower_means, width, label="LogPower", color="red")
+
+plt.title("Distribuição da Probabilidade Média Correta por Sujeito")
 plt.xlabel("Sujeito")
-plt.ylabel("Probabilidade média correta")
+plt.ylabel("Probabilidade Média Correta")
 plt.ylim(0, 1.05)
-plt.grid(True, linestyle="--", alpha=0.5)
+plt.xticks(x, subjects)
 plt.legend()
+plt.grid(True, linestyle="--", axis="y", alpha=0.5)
 plt.tight_layout()
 
-output_path = "graphics/results/accuracy_per_subject.png"
+output_path = "graphics/results/histogram_accuracy_per_subject.png"
 plt.savefig(output_path)
 plt.close()
 
-print(f"Gráfico salvo em: {output_path}")
+print(f"Histograma salvo em: {output_path}")
