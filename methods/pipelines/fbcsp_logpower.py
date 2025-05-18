@@ -13,6 +13,7 @@ from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
 from methods.features.logpower import logpower
 
+
 def run_fbcsp_logpower(subject_id: int):
     dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
     X = dataset["X"]
@@ -24,13 +25,18 @@ def run_fbcsp_logpower(subject_id: int):
     y = y[mask]
 
     eegdata = {"X": X, "sfreq": 512}
-    eegdata, _ = filterbank(eegdata, kind_bp="chebyshevII")
-
+    eegdata = filterbank(eegdata, kind_bp="chebyshevII")
+    if not isinstance(eegdata, dict) or "X" not in eegdata:
+        raise TypeError(
+            f"Retorno inesperado de filterbank em fbcsp_logpower: {type(eegdata)} - {eegdata}"
+        )
     X_filt = eegdata["X"]
 
     if X_filt.ndim == 5:
         n_trials, n_bands, n_chans, n_filters, n_samples = X_filt.shape
-        X_reshaped = X_filt.transpose(0, 1, 3, 2, 4).reshape(n_trials, n_bands * n_filters * n_chans, n_samples)
+        X_reshaped = X_filt.transpose(0, 1, 3, 2, 4).reshape(
+            n_trials, n_bands * n_filters * n_chans, n_samples
+        )
     elif X_filt.ndim == 4:
         n_trials, n_bands, n_chans, n_samples = X_filt.shape
         X_reshaped = X_filt.reshape(n_trials, n_bands * n_chans, n_samples)

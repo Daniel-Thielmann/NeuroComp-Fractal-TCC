@@ -24,19 +24,38 @@ def run_csp_logpower(subject_id: int):
     X = X[mask]
     y = y[mask]
 
-    eegdata = {"X": X, "sfreq": 512}
-    eegdata, _ = filterbank(eegdata, kind_bp="chebyshevII")
+    eegdata = {"X": X[:, np.newaxis, :, :], "sfreq": 512}
+    eegdata = filterbank(eegdata, kind_bp="chebyshevII")
+    if not isinstance(eegdata, dict) or "X" not in eegdata:
+        raise TypeError(
+            f"Retorno inesperado de filterbank em csp_logpower: {type(eegdata)} - {eegdata}"
+        )
     X_band = eegdata["X"]
+    # Garante shape correto: [n_trials, n_bands, n_channels, n_samples]
+    if X_band.ndim == 5:
+        # Remove dimensão de filtros se existir
+        X_band = X_band[:, :, 0, :, :]
+    if X_band.shape[2] > X_band.shape[3]:
+        # Se canais e samples estão invertidos, transpõe
+        X_band = X_band.transpose(0, 1, 3, 2)
 
     # Aplica CSP
-    transformer = csp()
+    transformer = csp()  # Não limita componentes no construtor
     transformer.fit({"X": X_band, "y": y})
-    X_csp = transformer.transform({"X": X_band})["X"]  # [trials, bands, components, samples]
+    X_csp = transformer.transform({"X": X_band})[
+        "X"
+    ]  # [trials, bands, components, samples]
 
-    # Extrai features: log da potência média por componente
+    # Extrai features: log da potência média dos 2 primeiros componentes por banda
     features = []
     for trial in X_csp:
-        trial_feat = [np.log(np.mean(comp**2)) for band in trial for comp in band]
+        # trial: [bands, components, samples]
+        trial_feat = []
+        for band in trial:
+            # Seleciona apenas os 2 primeiros componentes
+            comps = band[:2] if band.shape[0] >= 2 else band
+            for comp in comps:
+                trial_feat.append(np.log(np.mean(comp**2)))
         features.append(trial_feat)
 
     X_feat = np.array(features)

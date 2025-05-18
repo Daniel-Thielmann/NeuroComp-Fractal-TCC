@@ -1,10 +1,18 @@
 import numpy as np
 from scipy.signal import butter, filtfilt
+from scipy.stats import skew, kurtosis
+
 
 class HiguchiFractalEvolution:
     def __init__(self, kmax=100, bands=None, sfreq=512):
         self.kmax = kmax
-        self.bands = bands or [("theta", 4, 8), ("alpha", 8, 13), ("beta", 13, 30)]
+        self.bands = bands or [
+            ("delta", 0.5, 4),
+            ("theta", 4, 8),
+            ("alpha", 8, 13),
+            ("beta", 13, 30),
+            ("gamma", 30, 40),
+        ]
         self.sfreq = sfreq
         self.filter_bank = self._create_filter_bank()
 
@@ -20,7 +28,9 @@ class HiguchiFractalEvolution:
         if n < 10:
             return 0.0, 0.0, 0.0
 
-        scales = np.unique(np.logspace(0, np.log10(min(self.kmax, n // 2)), num=10, dtype=int))
+        scales = np.unique(
+            np.logspace(0, np.log10(min(self.kmax, n // 2)), num=10, dtype=int)
+        )
         lk = np.zeros(len(scales))
         diff = np.abs(np.diff(signal))
 
@@ -42,7 +52,8 @@ class HiguchiFractalEvolution:
 
     def extract(self, data):
         n_trials, n_channels, _ = data.shape
-        features = np.zeros((n_trials, n_channels * len(self.bands) * 3))
+        n_bands = len(self.bands)
+        features = np.zeros((n_trials, n_channels * n_bands * 5))
 
         for i in range(n_trials):
             for j in range(n_channels):
@@ -50,6 +61,8 @@ class HiguchiFractalEvolution:
                     b, a = self.filter_bank[band]
                     filtered = filtfilt(b, a, data[i, j])
                     slope, mean_lk, std_lk = self._calculate_enhanced_hfd(filtered)
-                    idx = (j * len(self.bands) + k) * 3
-                    features[i, idx:idx+3] = [slope, mean_lk, std_lk]
+                    sk = skew(filtered)
+                    kurt = kurtosis(filtered)
+                    idx = (j * n_bands + k) * 5
+                    features[i, idx : idx + 5] = [slope, mean_lk, std_lk, sk, kurt]
         return features
