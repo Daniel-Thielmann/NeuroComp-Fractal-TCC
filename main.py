@@ -1,4 +1,4 @@
-import os
+﻿import os
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -9,7 +9,7 @@ from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
-from methods.features.logpower import logpower
+from methods.features.logpower import LogPower
 from methods.features.fractal import HiguchiFractalEvolution
 from methods.pipelines.csp_fractal import run_csp_fractal
 from methods.pipelines.csp_logpower import run_csp_logpower
@@ -98,7 +98,7 @@ def run_logpower():
             n_trials, n_bands * n_filters * n_chans, n_samples
         )
 
-        extractor = logpower(sfreq=512)
+        extractor = LogPower(sfreq=512)
         X_feat = extractor.extract(X_reshaped)
         X_feat = StandardScaler().fit_transform(X_feat)
 
@@ -141,7 +141,7 @@ def log_summary(method_name):
     mean_prob = df["correct_prob"].mean()
     total = len(df)
     counts = dict(df["true_label"].value_counts().sort_index())
-    return f"[{method_name}] Acurácia: {acc:.4f} | Média Prob. Correta: {mean_prob:.4f} | Amostras: {total} | Rótulos: {counts}"
+    return f"[{method_name}] Acuracia: {acc:.4f} | Media Prob. Correta: {mean_prob:.4f} | Amostras: {total} | Rotulos: {counts}"
 
 
 def build_final_csv_and_wilcoxon():
@@ -181,8 +181,8 @@ def build_final_csv_and_wilcoxon():
         print(f"Statistic: {stat:.4f}")
         print(f"P-value  : {p:.4e}")
         print(
-            "Conclusão:",
-            "Diferença significativa" if p < 0.05 else "Não há diferença significativa",
+            "Conclusao:",
+            "Diferenca significativa" if p < 0.05 else "Nao ha diferenca significativa",
         )
 
 
@@ -212,7 +212,7 @@ def main():
                 f"results/{name}/Evaluate/P{subject_id:02d}.csv", index=False
             )
 
-    print("\n=== RESUMO FINAL DOS MÉTODOS ===")
+    print("\n=== RESUMO FINAL DOS METODOS ===")
     for method in [
         "Fractal",
         "LogPower",

@@ -33,10 +33,10 @@ def run_csp_logpower(subject_id: int):
     X_band = eegdata["X"]
     # Garante shape correto: [n_trials, n_bands, n_channels, n_samples]
     if X_band.ndim == 5:
-        # Remove dimensão de filtros se existir
+        # Remove dimensao de filtros se existir
         X_band = X_band[:, :, 0, :, :]
     if X_band.shape[2] > X_band.shape[3]:
-        # Se canais e samples estão invertidos, transpõe
+        # Se canais e samples estao invertidos, transpoe
         X_band = X_band.transpose(0, 1, 3, 2)
 
     # Aplica CSP
@@ -61,7 +61,7 @@ def run_csp_logpower(subject_id: int):
     X_feat = np.array(features)
     X_feat = StandardScaler().fit_transform(X_feat)
 
-    # Validação cruzada para evitar overfitting
+    # Validacao cruzada para evitar overfitting
     results = []
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):

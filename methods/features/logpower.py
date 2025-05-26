@@ -1,16 +1,15 @@
-
 import numpy as np
 from scipy.signal import welch
 
 
-class logpower:
+class LogPower:
     def __init__(self, freq_bands=None, sfreq=512):
         self.freq_bands = freq_bands or [
-            ('delta', 0.5, 4),
-            ('theta', 4, 8),
-            ('alpha', 8, 13),
-            ('beta', 13, 30),
-            ('gamma', 30, 40)
+            ("delta", 0.5, 4),
+            ("theta", 4, 8),
+            ("alpha", 8, 13),
+            ("beta", 13, 30),
+            ("gamma", 30, 40),
         ]
         self.sfreq = sfreq
 

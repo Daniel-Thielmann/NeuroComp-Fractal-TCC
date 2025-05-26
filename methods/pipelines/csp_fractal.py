@@ -42,24 +42,24 @@ def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
     hfd = HiguchiFractalEvolution(kmax=100)
     features = []
     for trial in X_csp:
-        # Para cada trial, extraímos os dois primeiros componentes
+        # Para cada trial, extraimos os dois primeiros componentes
         comps = (
             trial[:4] if trial.shape[0] >= 4 else trial
         )  # Usando 4 componentes para mais info
         trial_feat = []
         for comp in comps:
-            # Adicionando informação de energia ao lado das features fractais
+            # Adicionando informacao de energia ao lado das features fractais
             energy = np.log(np.mean(comp**2) + 1e-10)
             # Extraindo features fractais do componente
             slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
-            # Características estatísticas adicionais
+            # Caracteristicas estatisticas adicionais
             sk = np.std(comp)
-            # Concatenando todas as características por componente
+            # Concatenando todas as caracteristicas por componente
             trial_feat.extend([slope, mean_lk, std_lk, energy, sk])
         features.append(trial_feat)
 
     features = np.array(features)
-    # Normalização e redução de dimensionalidade
+    # Normalizacao e reducao de dimensionalidade
     features = StandardScaler().fit_transform(features)
     # Aplica PCA para reduzir dimensionalidade (15 componentes)
     features = PCA(n_components=min(15, features.shape[1])).fit_transform(features)

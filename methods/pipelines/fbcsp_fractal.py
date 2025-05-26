@@ -1,3 +1,4 @@
+# filepath: d:\dev\EEG-TCC\methods\pipelines\fbcsp_fractal.py
 import numpy as np
 from bciflow.datasets import cbcic
 from bciflow.modules.sf.csp import csp
@@ -9,11 +10,21 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
 
 def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
+    """
+    Executa o metodo FBCSP (Filter Bank CSP) combinado com features fractais para classificacao de EEG.
+
+    Args:
+        subject_id: ID do sujeito a ser processado (1-9)
+        data_path: Caminho para o diretorio com os dados
+
+    Returns:
+        Lista de dicionarios com os resultados de classificacao
+    """
     dataset = cbcic(subject=subject_id, path=data_path)
     X = dataset["X"]
     y = np.array(dataset["y"]) + 1
 
-    # Filtra classes 1 e 2, se necessário
+    # Filtra classes 1 e 2, se necessario
     mask = (y == 1) | (y == 2)
     X = X[mask]
     y = y[mask]
@@ -22,7 +33,7 @@ def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
     eegdata = filterbank(eegdata, kind_bp="chebyshevII")
     if not isinstance(eegdata, dict) or "X" not in eegdata:
         raise TypeError(
-            f"Retorno inesperado de filterbank em fbcsp_fractal: {type(eegdata)} - {eegdata}"
+            f"Retorno inesperado de filterbank: {type(eegdata)} - {eegdata}"
         )
     X_filt = eegdata["X"]
 
@@ -34,9 +45,9 @@ def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
         )
     elif X_filt.ndim == 4:
         n_trials, n_bands, n_chans, n_samples = X_filt.shape
-        # shape já está correto
+        # shape ja esta correto
     else:
-        raise ValueError(f"Shape inesperado após filterbank: {X_filt.shape}")
+        raise ValueError(f"Shape inesperado apos filterbank: {X_filt.shape}")
 
     transformer = csp()
     transformer.fit({"X": X_filt, "y": y})

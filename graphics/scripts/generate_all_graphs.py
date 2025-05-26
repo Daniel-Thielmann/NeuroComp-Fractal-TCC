@@ -6,13 +6,13 @@ os.makedirs("graphics/results", exist_ok=True)
 # Lista de scripts de geração de gráficos (sem emojis, nomes exatos)
 scripts = [
     "accuracy_per_subject.py",
-    "boxplot_higuchi_vs_logpower.py",
+    "boxplot_fractal_vs_logpower.py",  # Atualizado
     "confusion_matrix_comparison.py",
     "heatmap_subject_vs_method.py",
-    "histogram_higuchi_vs_logpower.py",
-    "scatter_higuchi_vs_logpower.py",
-    "violinplot_higuchi_vs_logpower.py",
-    "wilcoxon_pvalue_plot.py"
+    "histogram_fractal_vs_logpower.py",  # Atualizado
+    "scatter_fractal_vs_logpower.py",  # Atualizado
+    "violinplot_fractal_vs_logpower.py",  # Atualizado
+    "wilcoxon_pvalue_plot.py",
 ]
 
 # Executa cada script individualmente

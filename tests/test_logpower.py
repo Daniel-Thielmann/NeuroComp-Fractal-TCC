@@ -1,3 +1,4 @@
+# filepath: d:\dev\EEG-TCC\tests\test_logpower.py
 import sys
 import os
 from tqdm import tqdm
@@ -10,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
-from methods.features.logpower import logpower
+from methods.features.logpower import LogPower
 
 
 def run_logpower_all():
@@ -26,49 +27,66 @@ def run_logpower_all():
         X = X[mask]
         y = y[mask]
 
-        eegdata = {"X": X, "sfreq": 512}
-        eegdata = filterbank(eegdata, kind_bp="chebyshevII")
-        X_feat = logpower(eegdata, flating=True)["X"]
+        eegdata_dict = {"X": X[:, np.newaxis, :, :], "sfreq": 512}
+        eegdata_dict = filterbank(eegdata_dict, kind_bp="chebyshevII")
+        if not isinstance(eegdata_dict, dict) or "X" not in eegdata_dict:
+            raise TypeError(
+                f"Retorno inesperado de filterbank: {type(eegdata_dict)} - {eegdata_dict}"
+            )
+        X_filtered = eegdata_dict["X"]
+
+        if X_filtered.ndim != 5:
+            raise ValueError(f"Shape inesperado ap�s filterbank: {X_filtered.shape}")
+
+        n_trials, n_bands, n_chans, n_filters, n_samples = X_filtered.shape
+        X_reshaped = X_filtered.transpose(0, 1, 3, 2, 4).reshape(
+            n_trials, n_bands * n_filters * n_chans, n_samples
+        )
+
+        extractor = LogPower(sfreq=512)
+        X_feat = extractor.extract(X_reshaped)
         X_feat = StandardScaler().fit_transform(X_feat)
 
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
-            X_train, X_test = X_feat[train_idx], X_feat[test_idx]
-            y_train, y_test = y[train_idx], y[test_idx]
-
             clf = LDA()
-            clf.fit(X_train, y_train)
-            probs = clf.predict_proba(X_test)
+            clf.fit(X_feat[train_idx], y[train_idx])
+            probs = clf.predict_proba(X_feat[test_idx])
 
             for i, idx in enumerate(test_idx):
-                all_rows.append(
-                    {
-                        "subject_id": subject_id,
-                        "fold": fold_idx,
-                        "true_label": y_test[i],
-                        "left_prob": probs[i][0],
-                        "right_prob": probs[i][1],
-                    }
-                )
-
-        # Salva CSV por sujeito
-        df_sub = pd.DataFrame([r for r in all_rows if r["subject_id"] == subject_id])
-        os.makedirs("results/LogPower/Training", exist_ok=True)
-        df_sub.to_csv(f"results/LogPower/Training/P{subject_id:02d}.csv", index=False)
+                row = {
+                    "subject_id": subject_id,
+                    "fold": fold_idx,
+                    "true_label": y[idx],
+                    "left_prob": probs[i][0],
+                    "right_prob": probs[i][1],
+                    "predicted": np.argmax(probs[i]) + 1,
+                }
+                all_rows.append(row)
 
     return pd.DataFrame(all_rows)
 
 
+def test_logpower_accuracy():
+    """Testa se a acur�cia do m�todo LogPower est� acima de um limiar aceit�vel."""
+    df = run_logpower_all()
+    acc = (df["true_label"] == df["predicted"]).mean()
+    print(f"LogPower Accuracy: {acc:.4f}")
+    assert acc > 0.6, f"Accuracy abaixo do esperado: {acc:.4f}"
+
+
+def test_logpower_class_balance():
+    """Testa se o balanceamento de classes est� adequado."""
+    df = run_logpower_all()
+    class_counts = df["true_label"].value_counts()
+    print(f"Class distribution: {class_counts}")
+    assert (
+        class_counts.min() / class_counts.max() > 0.8
+    ), f"Desbalanceamento excessivo: {class_counts}"
+
+
 if __name__ == "__main__":
     df = run_logpower_all()
-    df["correct_prob"] = df.apply(
-        lambda row: row["left_prob"] if row["true_label"] == 1 else row["right_prob"],
-        axis=1,
-    )
-    acc = (df["true_label"] == df["left_prob"].lt(0.5).astype(int) + 1).mean()
-    mean_prob = df["correct_prob"].mean()
-    total = len(df)
-    counts = dict(df["true_label"].value_counts().sort_index())
-    print(
-        f"Acurácia: {acc:.4f} | Média Prob. Correta: {mean_prob:.4f} | Amostras: {total} | Rótulos: {counts}"
-    )
+    acc = (df["true_label"] == df["predicted"]).mean()
+    print(f"LogPower Accuracy: {acc:.4f}")
+    print(f"Class distribution: {df['true_label'].value_counts()}")
