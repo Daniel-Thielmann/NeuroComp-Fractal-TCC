@@ -296,7 +296,6 @@ def run_kappa_analysis():
 
         # Salvar os resultados em um arquivo CSV
         results.to_csv("results/summaries/kappa_by_subject_method.csv", index=False)
-        print(f"\nResultados salvos em 'results/summaries/kappa_by_subject_method.csv'")
 
         return results
     except Exception as e:

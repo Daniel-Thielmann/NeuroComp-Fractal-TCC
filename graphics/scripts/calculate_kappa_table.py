@@ -91,7 +91,6 @@ for col in methods:
     )
 
 # Print table
-print("\nKappa values for each subject and method:")
 print(tabulate(formatted_results, headers="keys", tablefmt="grid", showindex=False))
 
 # Save the table to CSV
@@ -126,6 +125,3 @@ plt.tight_layout()
 plt.title("Cohen's Kappa by Subject and Method")
 plt.savefig("graphics/results/kappa_heatmap.png", dpi=300, bbox_inches="tight")
 plt.close()
-
-print(f"\nResults saved to 'results/summaries/kappa_by_subject_method.csv'")
-print(f"Heatmap saved to 'graphics/results/kappa_heatmap.png'")
