@@ -1,0 +1,31 @@
+# Resumo dos Resultados da Análise
+
+## Acurácia dos Métodos
+- Fractal: 63,03%
+- LogPower: 70,13%
+- CSP_Fractal: 75,00% (melhor acurácia)
+- CSP_LogPower: 71,30%
+- FBCSP_Fractal: 73,03% 
+- FBCSP_LogPower: 69,79%
+
+## Comparações Estatísticas (Wilcoxon)
+Todas as comparações mostraram diferença estatisticamente significativa (p < 0.05)
+
+## Análise de Kappa
+O método com melhor desempenho geral foi CSP_Fractal com kappa médio de 0,5111.
+
+### Melhores Combinações Método-Sujeito:
+- CSP_Fractal com sujeito P02: kappa = 0,9667 (melhor resultado global)
+- CSP_Fractal com sujeito P01: kappa = 0,7500
+- FBCSP_Fractal com sujeito P04: kappa = 0,6500
+
+### Melhores Métodos para Cada Sujeito:
+- P01, P02, P05: CSP_Fractal
+- P03: LogPower/FBCSP_LogPower
+- P04, P06: FBCSP_Fractal
+- P07, P08, P09: CSP_LogPower
+
+## Conclusões
+1. Os métodos baseados em CSP geralmente apresentam melhor desempenho
+2. Há grande variabilidade entre sujeitos, sugerindo benefícios na personalização
+3. As características fractais combinadas com CSP oferecem o melhor desempenho médio

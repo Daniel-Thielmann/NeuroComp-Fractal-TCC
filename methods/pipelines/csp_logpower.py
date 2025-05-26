@@ -15,6 +15,15 @@ from bciflow.modules.sf.csp import csp
 
 
 def run_csp_logpower(subject_id: int):
+    """
+    Executa o metodo CSP combinado com LogPower para classificacao de EEG.
+
+    Args:
+        subject_id: ID do sujeito a ser processado (1-9)
+
+    Returns:
+        Lista de dicionarios com os resultados de classificacao
+    """
     dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
     X = dataset["X"]
     y = np.array(dataset["y"]) + 1

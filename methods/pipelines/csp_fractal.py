@@ -9,6 +9,16 @@ from methods.features.fractal import HiguchiFractalEvolution
 
 
 def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
+    """
+    Executa o metodo CSP combinado com features fractais para classificacao de EEG.
+
+    Args:
+        subject_id: ID do sujeito a ser processado (1-9)
+        data_path: Caminho para o diretorio com os dados
+
+    Returns:
+        Lista de dicionarios com os resultados de classificacao
+    """
     dataset = cbcic(subject=subject_id, path=data_path)
     X = dataset["X"]
     y = np.array(dataset["y"]) + 1

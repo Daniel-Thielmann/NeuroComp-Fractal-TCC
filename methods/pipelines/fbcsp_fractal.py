@@ -1,4 +1,3 @@
-# filepath: d:\dev\EEG-TCC\methods\pipelines\fbcsp_fractal.py
 import numpy as np
 from bciflow.datasets import cbcic
 from bciflow.modules.sf.csp import csp

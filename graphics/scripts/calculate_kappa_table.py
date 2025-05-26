@@ -49,20 +49,39 @@ def calculate_kappa(subject_id, method):
 results = pd.DataFrame(columns=["Subject"] + methods)
 
 # Calculate kappa for each subject and method
-for subject_id in range(1, 11):  # Subjects 1-10
+for subject_id in range(1, 10):  # Subjects 1-9
     row = {"Subject": f"P{subject_id:02d}"}
 
     for method in methods:
         kappa = calculate_kappa(subject_id, method)
         row[method] = kappa
 
-    results = pd.concat([results, pd.DataFrame([row])], ignore_index=True)
-
+    new_row = pd.DataFrame([row])
+    if not new_row.isnull().all(axis=1).iloc[0]:
+        # Check if the results DataFrame is empty
+        if results.empty:
+            results = new_row.copy()
+        else:
+            # Create a copy of the result before concatenation
+            results_copy = results.copy()
+            # Concatenate with copy to avoid warnings
+            results = pd.concat([results_copy, new_row], ignore_index=True)
 # Add mean row
 mean_row = {"Subject": "Mean"}
 for method in methods:
     mean_row[method] = results[method].mean()
-results = pd.concat([results, pd.DataFrame([mean_row])], ignore_index=True)
+
+# Create DataFrame with the mean row
+mean_df = pd.DataFrame([mean_row])
+
+# Check if results is empty before concatenation
+if results.empty:
+    results = mean_df.copy()
+else:
+    # Create a copy of the result before concatenation
+    results_copy = results.copy()
+    # Concatenate with copy to avoid warnings
+    results = pd.concat([results_copy, mean_df], ignore_index=True)
 
 # Format and display the table
 formatted_results = results.copy()

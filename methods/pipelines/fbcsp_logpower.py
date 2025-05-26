@@ -1,4 +1,3 @@
-# filepath: d:\dev\EEG-TCC\methods\pipelines\fbcsp_logpower.py
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import StratifiedKFold
