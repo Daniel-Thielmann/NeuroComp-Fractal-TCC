@@ -165,7 +165,11 @@ def log_summary(method_name):
 
 def build_final_csv_and_wilcoxon():
     def extract_correct_prob(row):
-        return row["left_prob"] if row["true_label"] == 1 else row["right_prob"]
+        # Handle both numeric and string column types
+        true_label = row["true_label"]
+        if isinstance(true_label, str):
+            true_label = float(true_label)
+        return row["left_prob"] if true_label == 1 else row["right_prob"]
 
     def load_all(method):
         all_probs = []
@@ -177,9 +181,25 @@ def build_final_csv_and_wilcoxon():
             if not files:
                 continue
             for file in files:
-                df = pd.read_csv(os.path.join(folder, file))
-                df = df[df["true_label"].isin([1, 2])]
-                all_probs.extend(df.apply(extract_correct_prob, axis=1))
+                try:
+                    df = pd.read_csv(os.path.join(folder, file))
+                    # Skip files that don't have the expected columns
+                    if (
+                        "true_label" not in df.columns
+                        or "left_prob" not in df.columns
+                        or "right_prob" not in df.columns
+                    ):
+                        print(
+                            f"Warning: {file} in {folder} is missing required columns. Skipping."
+                        )
+                        continue
+
+                    # Filter rows with valid labels
+                    df = df[df["true_label"].astype(str).isin(["1", "2", "1.0", "2.0"])]
+                    if not df.empty:
+                        all_probs.extend(df.apply(extract_correct_prob, axis=1))
+                except Exception as e:
+                    print(f"Error processing {file} in {folder}: {e}")
         return all_probs
 
     comparisons = [
@@ -193,19 +213,37 @@ def build_final_csv_and_wilcoxon():
         vals1 = load_all(m1)
         vals2 = load_all(m2)
 
+        if not vals1 or not vals2:
+            print(
+                f"Insufficient data for comparison. {m1}: {len(vals1)} samples, {m2}: {len(vals2)} samples"
+            )
+            continue
+
         min_len = min(len(vals1), len(vals2))
+        if min_len == 0:
+            print(f"No valid data for comparison between {m1} and {m2}")
+            continue
+
         vals1, vals2 = vals1[:min_len], vals2[:min_len]
 
         df_comp = pd.DataFrame({m1: vals1, m2: vals2})
+        os.makedirs("results/summaries", exist_ok=True)
         df_comp.to_csv(f"results/summaries/{m1}_vs_{m2}_comparison.csv", index=False)
 
-        stat, p = wilcoxon(df_comp[m1], df_comp[m2])
-        print(f"Statistic: {stat:.4f}")
-        print(f"P-value  : {p:.4e}")
-        print(
-            "Conclusao:",
-            "Diferenca significativa" if p < 0.05 else "Nao ha diferenca significativa",
-        )
+        try:
+            stat, p = wilcoxon(df_comp[m1], df_comp[m2])
+            print(f"Statistic: {stat:.4f}")
+            print(f"P-value  : {p:.4e}")
+            print(
+                "Conclusao:",
+                (
+                    "Diferenca significativa"
+                    if p < 0.05
+                    else "Nao ha diferenca significativa"
+                ),
+            )
+        except Exception as e:
+            print(f"Error performing Wilcoxon test: {e}")
 
 
 def run_kappa_analysis():
@@ -341,6 +379,7 @@ def main():
         print(log_summary(method))
 
     build_final_csv_and_wilcoxon()
+    kappa_results = run_kappa_analysis()
     run_kappa_analysis()
 
 

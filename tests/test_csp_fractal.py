@@ -1,101 +1,130 @@
-import sys
 import os
-from tqdm import tqdm
-
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-import pandas as pd
+import sys
 import numpy as np
+import pandas as pd
+from tqdm import tqdm
 from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
-# Usando LDA para obter melhor acurácia
+# Adiciona o diretório raiz ao path do Python para importações
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from bciflow.datasets import cbcic
-from bciflow.modules.sf.csp import csp
-from methods.features.fractal import HiguchiFractalEvolution
+from methods.pipelines.csp_fractal import run_csp_fractal
 
 
-def run_csp_fractal_all():
+def test_run_csp_fractal_format():
+    """Testa o formato de saída da função run_csp_fractal para um sujeito."""
+    # Executa o CSP+Fractal para um sujeito
+    subject_id = 1
+    rows = run_csp_fractal(subject_id)
+    
+    # Verifica se a saída é uma lista de dicionários
+    assert isinstance(rows, list), "A saída deve ser uma lista"
+    assert all(isinstance(row, dict) for row in rows), "Todos os elementos devem ser dicionários"
+    
+    # Verifica se cada dicionário tem as chaves corretas
+    expected_keys = {"subject_id", "fold", "true_label", "left_prob", "right_prob"}
+    for row in rows:
+        assert set(row.keys()) == expected_keys, f"Chaves incorretas: {set(row.keys())}"
+    
+    # Verifica se há 5 folds e se os valores estão corretos
+    folds = set(row["fold"] for row in rows)
+    assert folds == {0, 1, 2, 3, 4}, f"Folds incorretos: {folds}"
+    
+    # Verifica se os valores de probabilidade estão entre 0 e 1
+    for row in rows:
+        assert 0 <= row["left_prob"] <= 1, f"Probabilidade left inválida: {row['left_prob']}"
+        assert 0 <= row["right_prob"] <= 1, f"Probabilidade right inválida: {row['right_prob']}"
+        assert abs(row["left_prob"] + row["right_prob"] - 1.0) < 1e-6, \
+            f"Soma das probabilidades não é 1: {row['left_prob'] + row['right_prob']}"
+    
+    # Verifica se o subject_id está correto
+    assert all(row["subject_id"] == subject_id for row in rows), "Subject ID incorreto"
+    
+    # Verifica se os rótulos são 1 ou 2
+    labels = set(row["true_label"] for row in rows)
+    assert labels.issubset({1, 2}), f"Rótulos inválidos: {labels}"
+
+
+def test_run_csp_fractal_performance():
+    """Testa o desempenho do método CSP+Fractal em um sujeito."""
+    # Executa o CSP+Fractal para um sujeito
+    subject_id = 1
+    rows = run_csp_fractal(subject_id)
+    
+    # Converte para DataFrame para facilitar análises
+    df = pd.DataFrame(rows)
+    
+    # Calcula acurácia
+    df["predicted"] = (df["left_prob"] < 0.5).astype(int) + 1
+    accuracy = (df["true_label"] == df["predicted"]).mean()
+    
+    # Verifica se a acurácia está acima do nível de chance (50%)
+    assert accuracy > 0.5, f"Acurácia abaixo do nível de chance: {accuracy}"
+    print(f"Acurácia do CSP+Fractal para o sujeito {subject_id}: {accuracy:.4f}")
+
+
+def run_csp_fractal_all_subjects():
+    """Executa o método CSP+Fractal para todos os sujeitos e retorna os resultados."""
     all_rows = []
-
-    # Usando kmax=100 para extrair Fractal mais refinado
-    hfd = HiguchiFractalEvolution(kmax=100)
-
+    
     for subject_id in tqdm(range(1, 10), desc="CSP_Fractal"):
-        dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
-        X = dataset["X"].squeeze(1)
-        y = np.array(dataset["y"]) + 1
-
-        # Foco apenas em labels 1 e 2
-        mask = (y == 1) | (y == 2)
-        X = X[mask]
-        y = y[mask]
-
-        # Aplica CSP para extrair componentes espaciais
-        X_band = np.expand_dims(X, axis=1)  # [n_trials, 1, channels, samples]
-        transformer = csp()
-        transformer.fit({"X": X_band, "y": y})
-        X_csp = transformer.transform({"X": X_band})["X"][
-            :, 0
-        ]  # [n_trials, components, samples]
-
-        # Calcula Higuchi Fractal para cada componente CSP
-        features = []
-        for trial in X_csp:
-            trial_feat = []
-            for comp in trial:
-                comp = comp - np.mean(comp)  # baseline correction
-                slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
-                trial_feat.extend([slope, mean_lk, std_lk])
-            features.append(trial_feat)
-
-        # Padroniza as features
-        X_feat = np.array(features)
-        X_feat = StandardScaler().fit_transform(X_feat)
-
-        # Classificação com LDA (melhor desempenho para CSP+Fractal)
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_feat, y)):
-            X_train, X_test = X_feat[train_idx], X_feat[test_idx]
-            y_train, y_test = y[train_idx], y[test_idx]
-
-            clf = LDA()
-            clf.fit(X_train, y_train)
-            probs = clf.predict_proba(X_test)
-
-            for i, idx in enumerate(test_idx):
-                all_rows.append(
-                    {
-                        "subject_id": subject_id,
-                        "fold": fold_idx,
-                        "true_label": y_test[i],
-                        "left_prob": probs[i][0],
-                        "right_prob": probs[i][1],
-                    }
-                )
-
-        # Salva CSV por sujeito
-        df_sub = pd.DataFrame([r for r in all_rows if r["subject_id"] == subject_id])
-        os.makedirs("results/CSP_Fractal/Training", exist_ok=True)
-        df_sub.to_csv(
-            f"results/CSP_Fractal/Training/P{subject_id:02d}.csv", index=False
-        )
-
+        try:
+            rows = run_csp_fractal(subject_id)
+            all_rows.extend(rows)
+            
+            # Salva os resultados para este sujeito
+            df_subject = pd.DataFrame(rows)
+            
+            # Divide em conjuntos de treinamento e avaliação
+            os.makedirs("results/CSP_Fractal/Training", exist_ok=True)
+            os.makedirs("results/CSP_Fractal/Evaluate", exist_ok=True)
+            
+            df_subject[df_subject["fold"] < 4].to_csv(
+                f"results/CSP_Fractal/Training/P{subject_id:02d}.csv", index=False
+            )
+            df_subject[df_subject["fold"] == 4].to_csv(
+                f"results/CSP_Fractal/Evaluate/P{subject_id:02d}.csv", index=False
+            )
+            
+        except Exception as e:
+            print(f"Erro ao processar o sujeito {subject_id}: {str(e)}")
+    
     return pd.DataFrame(all_rows)
 
 
-if __name__ == "__main__":
-    df = run_csp_fractal_all()
+def test_csp_fractal_all_subjects_performance():
+    """Testa o desempenho do método CSP+Fractal em todos os sujeitos."""
+    df = run_csp_fractal_all_subjects()
+    
+    # Calcula métricas de desempenho
+    df["predicted"] = (df["left_prob"] < 0.5).astype(int) + 1
+    accuracy = (df["true_label"] == df["predicted"]).mean()
+    
     df["correct_prob"] = df.apply(
         lambda row: row["left_prob"] if row["true_label"] == 1 else row["right_prob"],
-        axis=1,
+        axis=1
     )
-    acc = (df["true_label"] == df["left_prob"].lt(0.5).astype(int) + 1).mean()
-    mean_prob = df["correct_prob"].mean()
-    total = len(df)
-    counts = dict(df["true_label"].value_counts().sort_index())
-    print(
-        f"Acurácia: {acc:.4f} | Média Prob. Correta: {mean_prob:.4f} | Amostras: {total} | Rótulos: {counts}"
+    mean_correct_prob = df["correct_prob"].mean()
+    
+    # Calcula acurácia por sujeito
+    subject_accuracies = df.groupby("subject_id").apply(
+        lambda x: (x["true_label"] == x["predicted"]).mean()
     )
+    
+    print(f"Acurácia global: {accuracy:.4f}")
+    print(f"Média de probabilidade correta: {mean_correct_prob:.4f}")
+    print("Acurácia por sujeito:")
+    for subject_id, acc in subject_accuracies.items():
+        print(f"  Sujeito {subject_id}: {acc:.4f}")
+
+
+if __name__ == "__main__":
+    # Executa os testes unitários
+    test_run_csp_fractal_format()
+    test_run_csp_fractal_performance()
+    print("Todos os testes unitários passaram!")
+    
+    # Executa o teste de desempenho para todos os sujeitos
+    test_csp_fractal_all_subjects_performance()
