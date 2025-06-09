@@ -246,17 +246,158 @@ def build_final_csv_and_wilcoxon():
             print(f"Error performing Wilcoxon test: {e}")
 
 
+def run_accuracy_analysis():
+    """
+    Executa a análise de acurácia para todos os sujeitos e métodos.
+    """
+    try:
+        print("\n=== ANÁLISE DE ACURÁCIA POR SUJEITO E MÉTODO ===")
+
+        methods = [
+            "Fractal",
+            "LogPower",
+            "CSP_Fractal",
+            "CSP_LogPower",
+            "FBCSP_Fractal",
+            "FBCSP_LogPower",
+        ]
+
+        # Calcular acurácia para cada sujeito e método
+        results = []
+
+        for subject_id in range(1, 10):  # Sujeitos 1-9
+            row = {"Sujeito": f"P{subject_id:02d}"}
+
+            for method in methods:
+                # Buscar arquivo de avaliação
+                eval_path = f"results/{method}/Evaluate/P{subject_id:02d}.csv"
+
+                if os.path.exists(eval_path):
+                    try:
+                        df = pd.read_csv(eval_path)
+                        if (
+                            "true_label" in df.columns
+                            and "left_prob" in df.columns
+                            and "right_prob" in df.columns
+                        ):
+                            # Predição: 1 se left_prob > right_prob, 2 caso contrário
+                            pred = (df["left_prob"] < df["right_prob"]).astype(int) + 1
+                            accuracy = (pred == df["true_label"]).mean()
+                            row[method] = accuracy
+                        else:
+                            row[method] = None
+                    except Exception as e:
+                        print(f"Erro ao processar {eval_path}: {e}")
+                        row[method] = None
+                else:
+                    row[method] = None
+
+            results.append(row)
+
+        # Converter para DataFrame
+        results_df = pd.DataFrame(results)
+
+        # Adicionar linha de média
+        mean_row = {"Sujeito": "Média"}
+        for method in methods:
+            valid_values = results_df[method].dropna()
+            if not valid_values.empty:
+                mean_row[method] = valid_values.mean()
+            else:
+                mean_row[method] = None
+
+        # Concatenar com a linha de média
+        results = pd.concat([results_df, pd.DataFrame([mean_row])], ignore_index=True)
+
+        # Formatar e exibir a tabela
+        formatted_results = results.copy()
+        for col in methods:
+            formatted_results[col] = formatted_results[col].apply(
+                lambda x: f"{x:.4f}" if pd.notnull(x) else "N/A"
+            )
+
+        from tabulate import tabulate
+
+        print("\nValores de Acurácia para cada sujeito e método:")
+        print(
+            tabulate(
+                formatted_results, headers="keys", tablefmt="grid", showindex=False
+            )
+        )
+
+        # Conclusão com os melhores métodos
+        numeric_results = results.iloc[-1, 1:].dropna()
+        if not numeric_results.empty:
+            best_method = numeric_results.idxmax()
+            best_value = numeric_results.max()
+            print(
+                f"\nCONCLUSÃO: O método com melhor acurácia geral foi '{best_method}' com uma acurácia média de {best_value:.4f}"
+            )
+
+            # Análise por sujeito - qual método funciona melhor para cada sujeito
+            print("\nMelhor método para cada sujeito (por acurácia):")
+            for i in range(len(results) - 1):  # Excluindo a linha de média
+                subject = results.iloc[i]["Sujeito"]
+                subject_values = results.iloc[i, 1:].dropna()
+                if not subject_values.empty:
+                    best_method_for_subject = subject_values.idxmax()
+                    best_value_for_subject = subject_values.max()
+                    print(
+                        f"- {subject}: {best_method_for_subject} (acurácia = {best_value_for_subject:.4f})"
+                    )
+
+        # Salvar os resultados em um arquivo CSV
+        results.to_csv("results/summaries/accuracy_by_subject_method.csv", index=False)
+
+        return results
+    except Exception as e:
+        print(f"Erro ao executar análise de acurácia: {e}")
+        return None
+
+
 def run_kappa_analysis():
     """
     Executa a análise de kappa para todos os sujeitos e métodos.
-    Importa o script de cálculo do kappa e executa suas funções.
     """
     try:
         print("\n=== ANÁLISE DE KAPPA POR SUJEITO E MÉTODO ===")
-        from graphics.scripts.calculate_kappa_table import calculate_kappa, methods
+        from sklearn.metrics import cohen_kappa_score
+
+        methods = [
+            "Fractal",
+            "LogPower",
+            "CSP_Fractal",
+            "CSP_LogPower",
+            "FBCSP_Fractal",
+            "FBCSP_LogPower",
+        ]
+
+        # Função para calcular kappa
+        def calculate_kappa(subject_id, method):
+            kappa = None
+            try:
+                true_labels = []
+                predictions = []
+
+                for subset in ["Training", "Evaluate"]:
+                    file_path = f"results/{method}/{subset}/P{subject_id:02d}.csv"
+                    if os.path.exists(file_path):
+                        df = pd.read_csv(file_path)
+                        df = df[df["true_label"].isin([1, 2])]
+                        pred_labels = (df["left_prob"] < 0.5).astype(int) + 1
+                        true_labels.extend(df["true_label"].values)
+                        predictions.extend(pred_labels)
+
+                if true_labels and predictions:
+                    kappa = cohen_kappa_score(true_labels, predictions)
+            except Exception as e:
+                print(
+                    f"Erro ao calcular kappa para sujeito {subject_id}, método {method}: {e}"
+                )
+            return kappa
 
         # Calcular kappa para cada sujeito e método
-        results = pd.DataFrame(columns=["Sujeito"] + methods)
+        results = []
 
         for subject_id in range(1, 10):  # Sujeitos 1-9
             row = {"Sujeito": f"P{subject_id:02d}"}
@@ -265,29 +406,18 @@ def run_kappa_analysis():
                 kappa = calculate_kappa(subject_id, method)
                 row[method] = kappa
 
-            # Criar DataFrame com a linha completa para evitar warning de concatenação
-            new_row = pd.DataFrame([row])
-            if not new_row.isnull().all(axis=1).iloc[0]:
-                # Verificar se o DataFrame results está vazio
-                if results.empty:
-                    results = new_row.copy()
-                else:
-                    # Criar uma cópia do resultado antes da concatenação
-                    results_copy = results.copy()
-                    # Concatenar com cópia para evitar warnings
-                    results = pd.concat([results_copy, new_row], ignore_index=True)
+            results.append(row)
+
+        # Converter para DataFrame
+        results_df = pd.DataFrame(results)
 
         # Adicionar linha de média
         mean_row = {"Sujeito": "Média"}
         for method in methods:
-            mean_row[method] = results[method].mean()
+            mean_row[method] = results_df[method].mean()
 
-        # Criar DataFrame com a linha de média completa
-        mean_df = pd.DataFrame([mean_row])
-        # Criar uma cópia do resultado antes da concatenação
-        results_copy = results.copy()
-        # Concatenar com cópia para evitar warnings
-        results = pd.concat([results_copy, mean_df], ignore_index=True)
+        # Concatenar com a linha de média - usando pd.concat com ignore_index
+        results = pd.concat([results_df, pd.DataFrame([mean_row])], ignore_index=True)
 
         # Formatar e exibir a tabela
         formatted_results = results.copy()
@@ -379,8 +509,8 @@ def main():
         print(log_summary(method))
 
     build_final_csv_and_wilcoxon()
+    accuracy_results = run_accuracy_analysis()
     kappa_results = run_kappa_analysis()
-    run_kappa_analysis()
 
 
 if __name__ == "__main__":

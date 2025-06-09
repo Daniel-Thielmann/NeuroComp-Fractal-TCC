@@ -90,10 +90,7 @@ for col in methods:
         lambda x: f"{x:.4f}" if pd.notnull(x) else "N/A"
     )
 
-# Print table
-print(tabulate(formatted_results, headers="keys", tablefmt="grid", showindex=False))
-
-# Save the table to CSV
+# Save the table to CSV (table will be printed by main.py)
 results.to_csv("results/summaries/kappa_by_subject_method.csv", index=False)
 
 # Create a heatmap visualization
