@@ -7,7 +7,6 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
 from methods.features.logpower import LogPower
 from methods.features.fractal import HiguchiFractalEvolution
@@ -17,6 +16,10 @@ from methods.pipelines.fbcsp_fractal import run_fbcsp_fractal
 from methods.pipelines.fbcsp_logpower import run_fbcsp_logpower
 import sys
 from pathlib import Path
+
+sys.path.append("bciflow")
+sys.path.append("contexts")
+from contexts.BCICIV2a import bciciv2a
 
 # Adicionando a pasta de scripts ao path para importação
 sys.path.append(str(Path("graphics/scripts")))
@@ -31,15 +34,18 @@ def run_fractal():
     os.makedirs("results/Fractal/Evaluate", exist_ok=True)
 
     for subject_id in tqdm(range(1, 10), desc="Fractal"):
-        dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
+        dataset = bciciv2a(subject=subject_id, path="dataset/BCICIV2a/")
         X = dataset["X"].squeeze(1)
-        y = np.array(dataset["y"]) + 1
+        y = np.array(
+            dataset["y"]
+        )  # BCICIV2a já retorna labels 0,1 para left-hand,right-hand
         ch_names = dataset["ch_names"]
         # selected_indices = [i for i, ch in enumerate(ch_names) if ch in selected_channels]
         # X = X[mask][:, selected_indices, :]
-        mask = (y == 1) | (y == 2)
-        X = X[mask]  # usa todos os canais
-        y = y[mask]
+        # BCICIV2a já filtra apenas left-hand e right-hand, não precisa de mask adicional
+
+        # Ajustar labels para 1,2 (como esperado pelo resto do código)
+        y = y + 1
 
         # Centraliza o sinal por canal/trial
         X = X - np.mean(X, axis=2, keepdims=True)
@@ -79,15 +85,16 @@ def run_logpower():
     os.makedirs("results/LogPower/Evaluate", exist_ok=True)
 
     for subject_id in tqdm(range(1, 10), desc="LogPower"):
-        dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
+        dataset = bciciv2a(subject=subject_id, path="dataset/BCICIV2a/")
         X = dataset["X"]
-        y = np.array(dataset["y"]) + 1
+        y = np.array(dataset["y"]) + 1  # Ajustar para 1,2
 
-        mask = (y == 1) | (y == 2)
-        X = X[mask]
-        y = y[mask]
+        # BCICIV2a já filtra apenas left-hand e right-hand, não precisa de mask
+        # mask = (y == 1) | (y == 2)
+        # X = X[mask]
+        # y = y[mask]
 
-        eegdata_dict = {"X": X[:, np.newaxis, :, :], "sfreq": 512}
+        eegdata_dict = {"X": X[:, np.newaxis, :, :], "sfreq": 250}  # BCICIV2a usa 250Hz
         eegdata_dict = filterbank(eegdata_dict, kind_bp="chebyshevII")
         if not isinstance(eegdata_dict, dict) or "X" not in eegdata_dict:
             raise TypeError(
@@ -103,7 +110,7 @@ def run_logpower():
             n_trials, n_bands * n_filters * n_chans, n_samples
         )
 
-        extractor = LogPower(sfreq=512)
+        extractor = LogPower(sfreq=250)  # BCICIV2a usa 250Hz
         X_feat = extractor.extract(X_reshaped)
         X_feat = StandardScaler().fit_transform(X_feat)
 
@@ -511,6 +518,14 @@ def main():
     build_final_csv_and_wilcoxon()
     accuracy_results = run_accuracy_analysis()
     kappa_results = run_kappa_analysis()
+
+
+def main_bciciv2a():
+    """
+    Função principal para executar análises no dataset BCICIV2a
+    REMOVIDA - usando apenas CBCIC
+    """
+    print("Esta funcionalidade foi removida. Usando apenas dataset CBCIC.")
 
 
 if __name__ == "__main__":
