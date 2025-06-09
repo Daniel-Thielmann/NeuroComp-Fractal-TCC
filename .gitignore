@@ -6,6 +6,8 @@ RECORDS
 SHA256SUMS.txt
 
 dataset/wcci2020
+dataset/BCICIV2a
+dataset/BCICIV2b
 
 __pycache__/
 
