@@ -1,14 +1,18 @@
 import numpy as np
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent.parent / "contexts"))
+from contexts.BCICIV2b import bciciv2b
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import StratifiedKFold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
-from bciflow.datasets import cbcic
 from bciflow.modules.tf.filterbank import filterbank
 from methods.features.logpower import LogPower
 
 
-def run_fbcsp_logpower(subject_id: int, data_path="dataset/wcci2020/"):
+def run_fbcsp_logpower(subject_id: int, data_path="dataset/BCICIV2b/"):
     """
     Executa o metodo FBCSP (Filter Bank CSP) combinado com Log Power para classificacao de EEG.
 
@@ -20,16 +24,16 @@ def run_fbcsp_logpower(subject_id: int, data_path="dataset/wcci2020/"):
         Lista de dicionarios com os resultados de classificacao
     """
     # Carrega os dados
-    dataset = cbcic(subject=subject_id, path=data_path)
+    dataset = bciciv2b(subject=subject_id, path=data_path)
     X = dataset["X"]
     y = np.array(dataset["y"]) + 1
 
-    # Filtra classes 1 e 2
-    mask = (y == 1) | (y == 2)
-    X = X[mask]
-    y = y[mask]
+    # Filtra classes 1 e 2 (BCICIV2b já retorna apenas left-hand e right-hand)
+    # mask = (y == 1) | (y == 2)
+    # X = X[mask]
+    # y = y[mask]
 
-    eegdata = {"X": X, "sfreq": 512}
+    eegdata = {"X": X, "sfreq": 250}  # BCICIV2b usa 250Hz
     eegdata = filterbank(eegdata, kind_bp="chebyshevII")
     if not isinstance(eegdata, dict) or "X" not in eegdata:
         raise TypeError(

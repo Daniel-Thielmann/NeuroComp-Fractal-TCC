@@ -1,5 +1,9 @@
 import numpy as np
-from bciflow.datasets import cbcic
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent.parent / "contexts"))
+from contexts.BCICIV2b import bciciv2b
 from bciflow.modules.sf.csp import csp
 from bciflow.modules.tf.filterbank import filterbank
 from methods.features.fractal import HiguchiFractalEvolution
@@ -8,7 +12,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
 
-def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
+def run_fbcsp_fractal(subject_id, data_path="dataset/BCICIV2b/"):
     """
     Executa o metodo FBCSP (Filter Bank CSP) combinado com features fractais para classificacao de EEG.
 
@@ -19,16 +23,16 @@ def run_fbcsp_fractal(subject_id, data_path="dataset/wcci2020/"):
     Returns:
         Lista de dicionarios com os resultados de classificacao
     """
-    dataset = cbcic(subject=subject_id, path=data_path)
+    dataset = bciciv2b(subject=subject_id, path=data_path)
     X = dataset["X"]
     y = np.array(dataset["y"]) + 1
 
-    # Filtra classes 1 e 2, se necessario
-    mask = (y == 1) | (y == 2)
-    X = X[mask]
-    y = y[mask]
+    # Filtra classes 1 e 2, se necessario (BCICIV2b já retorna apenas left-hand e right-hand)
+    # mask = (y == 1) | (y == 2)
+    # X = X[mask]
+    # y = y[mask]
 
-    eegdata = {"X": X, "sfreq": 512}
+    eegdata = {"X": X, "sfreq": 250}  # BCICIV2b usa 250Hz
     eegdata = filterbank(eegdata, kind_bp="chebyshevII")
     if not isinstance(eegdata, dict) or "X" not in eegdata:
         raise TypeError(

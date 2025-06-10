@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.append("bciflow")
 sys.path.append("contexts")
-from contexts.BCICIV2a import bciciv2a
+from contexts.BCICIV2b import bciciv2b
 
 # Adicionando a pasta de scripts ao path para importação
 sys.path.append(str(Path("graphics/scripts")))
@@ -34,15 +34,15 @@ def run_fractal():
     os.makedirs("results/Fractal/Evaluate", exist_ok=True)
 
     for subject_id in tqdm(range(1, 10), desc="Fractal"):
-        dataset = bciciv2a(subject=subject_id, path="dataset/BCICIV2a/")
+        dataset = bciciv2b(subject=subject_id, path="dataset/BCICIV2b/")
         X = dataset["X"].squeeze(1)
         y = np.array(
             dataset["y"]
-        )  # BCICIV2a já retorna labels 0,1 para left-hand,right-hand
+        )  # BCICIV2b já retorna labels 0,1 para left-hand,right-hand
         ch_names = dataset["ch_names"]
         # selected_indices = [i for i, ch in enumerate(ch_names) if ch in selected_channels]
         # X = X[mask][:, selected_indices, :]
-        # BCICIV2a já filtra apenas left-hand e right-hand, não precisa de mask adicional
+        # BCICIV2b já filtra apenas left-hand e right-hand, não precisa de mask adicional
 
         # Ajustar labels para 1,2 (como esperado pelo resto do código)
         y = y + 1
@@ -52,8 +52,14 @@ def run_fractal():
 
         features = hfd.extract(X)
         features = StandardScaler().fit_transform(features)
-        # Redução de dimensionalidade para 15 componentes (ajuste conforme necessário)
-        features = PCA(n_components=min(15, features.shape[1])).fit_transform(features)
+        # Redução de dimensionalidade - ajustar componentes baseado no número de amostras e features
+        n_components = min(15, features.shape[1], features.shape[0] - 1)
+        if n_components > 0:
+            features = PCA(n_components=n_components).fit_transform(features)
+        else:
+            print(
+                f"Warning: Subject {subject_id} has insufficient data for PCA. Using original features."
+            )
 
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         training_rows, evaluate_rows = [], []
@@ -85,16 +91,16 @@ def run_logpower():
     os.makedirs("results/LogPower/Evaluate", exist_ok=True)
 
     for subject_id in tqdm(range(1, 10), desc="LogPower"):
-        dataset = bciciv2a(subject=subject_id, path="dataset/BCICIV2a/")
+        dataset = bciciv2b(subject=subject_id, path="dataset/BCICIV2b/")
         X = dataset["X"]
         y = np.array(dataset["y"]) + 1  # Ajustar para 1,2
 
-        # BCICIV2a já filtra apenas left-hand e right-hand, não precisa de mask
+        # BCICIV2b já filtra apenas left-hand e right-hand, não precisa de mask
         # mask = (y == 1) | (y == 2)
         # X = X[mask]
         # y = y[mask]
 
-        eegdata_dict = {"X": X[:, np.newaxis, :, :], "sfreq": 250}  # BCICIV2a usa 250Hz
+        eegdata_dict = {"X": X[:, np.newaxis, :, :], "sfreq": 250}  # BCICIV2b usa 250Hz
         eegdata_dict = filterbank(eegdata_dict, kind_bp="chebyshevII")
         if not isinstance(eegdata_dict, dict) or "X" not in eegdata_dict:
             raise TypeError(
@@ -110,7 +116,7 @@ def run_logpower():
             n_trials, n_bands * n_filters * n_chans, n_samples
         )
 
-        extractor = LogPower(sfreq=250)  # BCICIV2a usa 250Hz
+        extractor = LogPower(sfreq=250)  # BCICIV2b usa 250Hz
         X_feat = extractor.extract(X_reshaped)
         X_feat = StandardScaler().fit_transform(X_feat)
 

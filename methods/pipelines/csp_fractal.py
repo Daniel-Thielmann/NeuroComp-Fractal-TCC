@@ -1,5 +1,9 @@
 import numpy as np
-from bciflow.datasets import cbcic
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent.parent / "contexts"))
+from contexts.BCICIV2b import bciciv2b
 from bciflow.modules.sf.csp import csp
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
@@ -8,7 +12,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from methods.features.fractal import HiguchiFractalEvolution
 
 
-def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
+def run_csp_fractal(subject_id, data_path="dataset/BCICIV2b/"):
     """
     Executa o metodo CSP combinado com features fractais para classificacao de EEG.
 
@@ -19,14 +23,14 @@ def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
     Returns:
         Lista de dicionarios com os resultados de classificacao
     """
-    dataset = cbcic(subject=subject_id, path=data_path)
+    dataset = bciciv2b(subject=subject_id, path=data_path)
     X = dataset["X"]
     y = np.array(dataset["y"]) + 1
 
-    # Filtra classes 1 e 2
-    mask = (y == 1) | (y == 2)
-    X = X[mask]
-    y = y[mask]
+    # Filtra classes 1 e 2 (BCICIV2b já retorna apenas left-hand e right-hand)
+    # mask = (y == 1) | (y == 2)
+    # X = X[mask]
+    # y = y[mask]
 
     # Garante shape correto: [n_trials, n_channels, n_samples]
     if X.ndim == 4 and X.shape[1] == 1:
@@ -71,8 +75,12 @@ def run_csp_fractal(subject_id, data_path="dataset/wcci2020/"):
     features = np.array(features)
     # Normalizacao e reducao de dimensionalidade
     features = StandardScaler().fit_transform(features)
-    # Aplica PCA para reduzir dimensionalidade (15 componentes)
-    features = PCA(n_components=min(15, features.shape[1])).fit_transform(features)
+    # Redução de dimensionalidade - ajustar componentes baseado no número de amostras e features
+    n_components = min(15, features.shape[1], features.shape[0] - 1)
+    if n_components > 0:
+        features = PCA(n_components=n_components).fit_transform(features)
+    else:
+        print(f"Warning: Insufficient data for PCA. Using original features.")
 
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     rows = []

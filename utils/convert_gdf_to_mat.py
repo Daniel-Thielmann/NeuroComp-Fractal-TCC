@@ -1,8 +1,14 @@
 import os
 import mne
 import scipy.io as sio
+import warnings
 
-input_folder = "dataset/BCICIV2a"
+# Silenciar warnings específicos do MNE sobre filtros inconsistentes
+warnings.filterwarnings(
+    "ignore", message=".*Highpass cutoff frequency.*is greater than lowpass.*"
+)
+
+input_folder = "dataset/BCICIV2b"
 
 # Cria a pasta se não existir
 os.makedirs(input_folder, exist_ok=True)

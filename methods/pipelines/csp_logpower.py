@@ -2,6 +2,7 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+sys.path.append(str(os.path.join(os.path.dirname(__file__), "..", "..", "contexts")))
 
 import numpy as np
 import pandas as pd
@@ -9,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import StratifiedKFold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
-from bciflow.datasets import cbcic
+from contexts.BCICIV2b import bciciv2b
 from bciflow.modules.tf.filterbank import filterbank
 from bciflow.modules.sf.csp import csp
 
@@ -24,16 +25,16 @@ def run_csp_logpower(subject_id: int):
     Returns:
         Lista de dicionarios com os resultados de classificacao
     """
-    dataset = cbcic(subject=subject_id, path="dataset/wcci2020/")
+    dataset = bciciv2b(subject=subject_id, path="dataset/BCICIV2b/")
     X = dataset["X"]
     y = np.array(dataset["y"]) + 1
 
-    # Filtra classes 1 e 2
-    mask = (y == 1) | (y == 2)
-    X = X[mask]
-    y = y[mask]
+    # Filtra classes 1 e 2 (BCICIV2b já retorna apenas left-hand e right-hand)
+    # mask = (y == 1) | (y == 2)
+    # X = X[mask]
+    # y = y[mask]
 
-    eegdata = {"X": X[:, np.newaxis, :, :], "sfreq": 512}
+    eegdata = {"X": X[:, np.newaxis, :, :], "sfreq": 250}  # BCICIV2b usa 250Hz
     eegdata = filterbank(eegdata, kind_bp="chebyshevII")
     if not isinstance(eegdata, dict) or "X" not in eegdata:
         raise TypeError(
