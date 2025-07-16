@@ -9,7 +9,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-from methods.features.fractal import HiguchiFractalEvolution
+from methods.features.fractal import higuchi_fractal
 
 
 def run_csp_fractal(subject_id, data_path="dataset/BCICIV2b/"):
@@ -53,10 +53,9 @@ def run_csp_fractal(subject_id, data_path="dataset/BCICIV2b/"):
     X_csp = X_csp[:, 0]  # Remove dimensão da banda
 
     # Extrai features fractais dos componentes CSP
-    hfd = HiguchiFractalEvolution(kmax=100)
     features = []
     for trial in X_csp:
-        # Para cada trial, extraimos os dois primeiros componentes
+        # Para cada trial, extraimos os componentes CSP
         comps = (
             trial[:4] if trial.shape[0] >= 4 else trial
         )  # Usando 4 componentes para mais info
@@ -64,12 +63,17 @@ def run_csp_fractal(subject_id, data_path="dataset/BCICIV2b/"):
         for comp in comps:
             # Adicionando informacao de energia ao lado das features fractais
             energy = np.log(np.mean(comp**2) + 1e-10)
-            # Extraindo features fractais do componente
-            slope, mean_lk, std_lk = hfd._calculate_enhanced_hfd(comp)
+            
+            # Extraindo dimensão fractal do componente usando nova função
+            comp_data = {"X": comp.reshape(1, 1, -1)}  # [1 trial, 1 canal, samples]
+            fractal_result = higuchi_fractal(comp_data, flating=True)
+            fractal_dim = fractal_result["X"][0, 0]  # Extrai valor escalar
+            
             # Caracteristicas estatisticas adicionais
             sk = np.std(comp)
+            
             # Concatenando todas as caracteristicas por componente
-            trial_feat.extend([slope, mean_lk, std_lk, energy, sk])
+            trial_feat.extend([fractal_dim, energy, sk])
         features.append(trial_feat)
 
     features = np.array(features)

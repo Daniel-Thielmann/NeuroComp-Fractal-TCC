@@ -1,0 +1,8 @@
+Método,Acurácia Média (%),Desvio Padrão (%),Kappa Médio,Melhor (%),Pior (%)
+FBCSP_+_Fractal,84.17,5.34,0.6833,93.75,77.50
+CSP_+_Fractal,81.11,4.02,0.6222,87.50,73.75
+FBCSP_+_LogPower,80.14,8.71,0.6028,96.25,62.50
+LogPower_Puro,76.53,5.77,0.5306,83.75,67.50
+FBCSP_+_Pure,75.14,10.55,0.5028,93.75,60.00
+CSP_+_LogPower,71.94,11.23,0.4389,87.50,56.25
+Fractal_Puro,54.72,4.99,0.0944,63.75,46.25

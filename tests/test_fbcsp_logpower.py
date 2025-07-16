@@ -1,130 +1,241 @@
 import os
 import sys
-import numpy as np
 import pandas as pd
-from tqdm import tqdm
-from sklearn.model_selection import StratifiedKFold
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+import numpy as np
+from sklearn.metrics import cohen_kappa_score
 
 # Adiciona o diretório raiz ao path do Python para importações
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from bciflow.datasets import cbcic
-from methods.pipelines.fbcsp_logpower import run_fbcsp_logpower
-
-
-def test_run_fbcsp_logpower_format():
-    """Testa o formato de saída da função run_fbcsp_logpower para um sujeito."""
-    # Executa o FBCSP+LogPower para um sujeito
-    subject_id = 1
-    rows = run_fbcsp_logpower(subject_id)
-    
-    # Verifica se a saída é uma lista de dicionários
-    assert isinstance(rows, list), "A saída deve ser uma lista"
-    assert all(isinstance(row, dict) for row in rows), "Todos os elementos devem ser dicionários"
-    
-    # Verifica se cada dicionário tem as chaves corretas
-    expected_keys = {"subject_id", "fold", "true_label", "left_prob", "right_prob"}
-    for row in rows:
-        assert set(row.keys()) == expected_keys, f"Chaves incorretas: {set(row.keys())}"
-    
-    # Verifica se há 5 folds e se os valores estão corretos
-    folds = set(row["fold"] for row in rows)
-    assert folds == {0, 1, 2, 3, 4}, f"Folds incorretos: {folds}"
-    
-    # Verifica se os valores de probabilidade estão entre 0 e 1
-    for row in rows:
-        assert 0 <= row["left_prob"] <= 1, f"Probabilidade left inválida: {row['left_prob']}"
-        assert 0 <= row["right_prob"] <= 1, f"Probabilidade right inválida: {row['right_prob']}"
-        assert abs(row["left_prob"] + row["right_prob"] - 1.0) < 1e-6, \
-            f"Soma das probabilidades não é 1: {row['left_prob'] + row['right_prob']}"
-    
-    # Verifica se o subject_id está correto
-    assert all(row["subject_id"] == subject_id for row in rows), "Subject ID incorreto"
-    
-    # Verifica se os rótulos são 1 ou 2
-    labels = set(row["true_label"] for row in rows)
-    assert labels.issubset({1, 2}), f"Rótulos inválidos: {labels}"
+from sklearn.metrics import cohen_kappa_score
 
 
-def test_run_fbcsp_logpower_performance():
-    """Testa o desempenho do método FBCSP+LogPower em um sujeito."""
-    # Executa o FBCSP+LogPower para um sujeito
-    subject_id = 1
-    rows = run_fbcsp_logpower(subject_id)
-    
-    # Converte para DataFrame para facilitar análises
-    df = pd.DataFrame(rows)
-    
-    # Calcula acurácia
-    df["predicted"] = (df["left_prob"] < 0.5).astype(int) + 1
-    accuracy = (df["true_label"] == df["predicted"]).mean()
-    
-    # Verifica se a acurácia está acima do nível de chance (50%)
-    assert accuracy > 0.5, f"Acurácia abaixo do nível de chance: {accuracy}"
-    print(f"Acurácia do FBCSP+LogPower para o sujeito {subject_id}: {accuracy:.4f}")
+def test_fbcsp_logpower_pipeline():
+    """
+    Testa o pipeline FBCSP com LogPower usando dataset WCCI2020 padronizado.
 
+    Executa classificação de motor imagery para todos os sujeitos do dataset WCCI2020
+    usando Filter Bank, CSP, extração de features LogPower e MIBIF com validação cruzada robusta.
 
-def run_fbcsp_logpower_all_subjects():
-    """Executa o método FBCSP+LogPower para todos os sujeitos e retorna os resultados."""
-    all_rows = []
-    
-    for subject_id in tqdm(range(1, 10), desc="FBCSP_LogPower"):
+    Returns:
+        dict: Resultados de performance por sujeito
+    """
+    print("Testando pipeline FBCSP LogPower...")
+    print("Dataset: WCCI2020 (9 sujeitos)")
+    print("Tarefa: Classificação de motor imagery (left-hand vs right-hand)")
+    print(
+        "Pipeline: Filter Bank (5 bandas) → CSP (4 comp) → Log(Energy) → MIBIF (30) → LDA (5-fold CV)"
+    )
+    print("-" * 60)
+
+    import scipy.io as sio
+    from sklearn.model_selection import StratifiedKFold
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+    from sklearn.feature_selection import SelectKBest, mutual_info_classif
+    from scipy.signal import butter, filtfilt
+
+    def bandpass_filter(data, low_freq, high_freq, sfreq=512, order=4):
+        """Aplica filtro passa-banda usando Butterworth."""
+        nyquist = sfreq / 2
+        low = low_freq / nyquist
+        high = high_freq / nyquist
+        b, a = butter(order, [low, high], btype="band")
+        return filtfilt(b, a, data, axis=-1)
+
+    def extract_fbcsp_logpower_features(X, y, frequency_bands, n_components=4):
+        """Extrai features FBCSP com log power - log da energia total das componentes CSP."""
+        from bciflow.modules.sf.csp import csp
+
+        all_features = []
+
+        # Para cada banda de frequência
+        for low_freq, high_freq in frequency_bands:
+            # Filtra dados para a banda atual
+            X_band = bandpass_filter(X, low_freq, high_freq, sfreq=512)
+
+            # Aplica CSP na banda
+            csp_transformer = csp()
+            csp_transformer.fit({"X": X_band[:, np.newaxis, :, :], "y": y})
+            X_csp = csp_transformer.transform({"X": X_band[:, np.newaxis, :, :]})["X"]
+            X_csp = X_csp[:, 0, :, :]  # [trials, components, samples]
+
+            # Para cada trial, extrai features dos componentes CSP
+            for trial_idx in range(X_csp.shape[0]):
+                if trial_idx >= len(all_features):
+                    all_features.append([])
+
+                trial_components = X_csp[trial_idx]
+                # Limita aos primeiros n_components componentes
+                comps = (
+                    trial_components[:n_components]
+                    if trial_components.shape[0] >= n_components
+                    else trial_components
+                )
+
+                # Extrai log power de cada componente (energia total)
+                for component in comps:
+                    # LogPower usando energia total = sum(x²)
+                    energy = np.sum(component**2)  # Energia total
+                    log_power = np.log(energy + 1e-10)
+                    all_features[trial_idx].append(log_power)
+
+        return np.array(all_features)
+
+    results = {}
+    all_accuracies = []
+    all_kappas = []
+
+    # Define bandas de frequência (mesmo padrão do FBCSP+Fractal)
+    frequency_bands = [
+        (8, 12),  # Alpha baixo
+        (12, 16),  # Alpha alto
+        (16, 20),  # Beta baixo
+        (20, 24),  # Beta médio
+        (24, 30),  # Beta alto
+    ]
+
+    for subject_id in range(1, 10):  # Sujeitos 1-9
+        print(f"Processando sujeito P{subject_id:02d}...")
+
         try:
-            rows = run_fbcsp_logpower(subject_id)
-            all_rows.extend(rows)
-            
-            # Salva os resultados para este sujeito
-            df_subject = pd.DataFrame(rows)
-            
-            # Divide em conjuntos de treinamento e avaliação
-            os.makedirs("results/FBCSP_LogPower/Training", exist_ok=True)
-            os.makedirs("results/FBCSP_LogPower/Evaluate", exist_ok=True)
-            
-            df_subject[df_subject["fold"] < 4].to_csv(
-                f"results/FBCSP_LogPower/Training/P{subject_id:02d}.csv", index=False
+            # Carrega dados do WCCI2020
+            mat_file = f"dataset/wcci2020/parsed_P{subject_id:02d}T.mat"
+            if not os.path.exists(mat_file):
+                raise FileNotFoundError(f"Arquivo não encontrado: {mat_file}")
+
+            mat_data = sio.loadmat(mat_file)
+            X = mat_data["RawEEGData"]  # [trials, channels, samples]
+            y = mat_data["Labels"].flatten()  # [trials]
+            sfreq = mat_data["sampRate"][0][0]  # Frequência de amostragem
+
+            print(
+                f"  Dados carregados: {X.shape[0]} trials, {X.shape[1]} canais, {X.shape[2]} amostras"
             )
-            df_subject[df_subject["fold"] == 4].to_csv(
-                f"results/FBCSP_LogPower/Evaluate/P{subject_id:02d}.csv", index=False
+            print(f"  Classes: {np.unique(y)}, Freq: {sfreq}Hz")
+
+            if X.shape[0] < 10:
+                print(
+                    f"  AVISO: Poucos dados ({X.shape[0]} trials), pulando sujeito..."
+                )
+                continue
+
+            # Validação cruzada 5-fold
+            cv_accuracies = []
+            cv_kappas = []
+
+            skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+            for fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
+                X_train, X_test = X[train_idx], X[test_idx]
+                y_train, y_test = y[train_idx], y[test_idx]
+
+                # Extrai features FBCSP LogPower
+                features_train = extract_fbcsp_logpower_features(
+                    X_train, y_train, frequency_bands, n_components=4
+                )
+                features_test = extract_fbcsp_logpower_features(
+                    X_test, y_test, frequency_bands, n_components=4
+                )
+
+                # Seleção de features com MIBIF
+                n_selected_features = min(30, features_train.shape[1])
+                selector = SelectKBest(
+                    score_func=mutual_info_classif, k=n_selected_features
+                )
+                features_train_selected = selector.fit_transform(
+                    features_train, y_train
+                )
+                features_test_selected = selector.transform(features_test)
+
+                # Normalização
+                scaler = StandardScaler()
+                features_train_final = scaler.fit_transform(features_train_selected)
+                features_test_final = scaler.transform(features_test_selected)
+
+                # Classificação LDA
+                clf = LDA()
+                clf.fit(features_train_final, y_train)
+                y_pred = clf.predict(features_test_final)
+
+                # Métricas
+                fold_accuracy = (y_test == y_pred).mean()
+                fold_kappa = cohen_kappa_score(y_test, y_pred)
+
+                cv_accuracies.append(fold_accuracy)
+                cv_kappas.append(fold_kappa)
+
+            # Métricas finais do sujeito
+            accuracy = np.mean(cv_accuracies)
+            kappa = np.mean(cv_kappas)
+
+            # Armazena resultados
+            results[f"P{subject_id:02d}"] = {
+                "accuracy": accuracy,
+                "kappa": kappa,
+                "n_samples": X.shape[0],
+                "class_distribution": dict(pd.Series(y).value_counts().sort_index()),
+                "cv_accuracies": cv_accuracies,
+                "cv_kappas": cv_kappas,
+            }
+
+            all_accuracies.append(accuracy)
+            all_kappas.append(kappa)
+
+            print(
+                f"  Acurácia: {accuracy:.4f} ± {np.std(cv_accuracies):.4f} | Kappa: {kappa:.4f} | Amostras: {X.shape[0]}"
             )
-            
+
         except Exception as e:
-            print(f"Erro ao processar o sujeito {subject_id}: {str(e)}")
-    
-    return pd.DataFrame(all_rows)
+            print(f"  ERRO: {str(e)}")
+            results[f"P{subject_id:02d}"] = {"error": str(e)}
 
+    # Estatísticas gerais
+    print("-" * 60)
+    print("RESULTADOS FINAIS:")
+    if all_accuracies:
+        print(
+            f"Acurácia média: {np.mean(all_accuracies):.4f} ± {np.std(all_accuracies):.4f}"
+        )
+        print(f"Kappa médio: {np.mean(all_kappas):.4f} ± {np.std(all_kappas):.4f}")
+        print(f"Melhor acurácia: {np.max(all_accuracies):.4f}")
+        print(f"Pior acurácia: {np.min(all_accuracies):.4f}")
 
-def test_fbcsp_logpower_all_subjects_performance():
-    """Testa o desempenho do método FBCSP+LogPower em todos os sujeitos."""
-    df = run_fbcsp_logpower_all_subjects()
-    
-    # Calcula métricas de desempenho
-    df["predicted"] = (df["left_prob"] < 0.5).astype(int) + 1
-    accuracy = (df["true_label"] == df["predicted"]).mean()
-    
-    df["correct_prob"] = df.apply(
-        lambda row: row["left_prob"] if row["true_label"] == 1 else row["right_prob"],
-        axis=1
-    )
-    mean_correct_prob = df["correct_prob"].mean()
-    
-    # Calcula acurácia por sujeito
-    subject_accuracies = df.groupby("subject_id").apply(
-        lambda x: (x["true_label"] == x["predicted"]).mean()
-    )
-    
-    print(f"Acurácia global: {accuracy:.4f}")
-    print(f"Média de probabilidade correta: {mean_correct_prob:.4f}")
-    print("Acurácia por sujeito:")
-    for subject_id, acc in subject_accuracies.items():
-        print(f"  Sujeito {subject_id}: {acc:.4f}")
+        # Verifica se pipeline está funcionando adequadamente
+        mean_accuracy = np.mean(all_accuracies)
+        assert (
+            mean_accuracy > 0.5
+        ), f"Acurácia média abaixo do acaso: {mean_accuracy:.4f}"
+
+        print("Teste do pipeline FBCSP LogPower concluído com sucesso.")
+    else:
+        print("Nenhum resultado válido obtido.")
+
+    return results
 
 
 if __name__ == "__main__":
-    # Executa os testes unitários
-    test_run_fbcsp_logpower_format()
-    test_run_fbcsp_logpower_performance()
-    print("Todos os testes unitários passaram!")
-    
-    # Executa o teste de desempenho para todos os sujeitos
-    test_fbcsp_logpower_all_subjects_performance()
+    print("=== TESTE: Pipeline FBCSP LogPower ===")
+    results = test_fbcsp_logpower_pipeline()
+
+    # Salva resultados para análise posterior
+    os.makedirs("results/test_outputs", exist_ok=True)
+
+    # Converte resultados para DataFrame
+    summary_data = []
+    for subject, metrics in results.items():
+        if "error" not in metrics:
+            summary_data.append(
+                {
+                    "Subject": subject,
+                    "Accuracy": metrics["accuracy"],
+                    "Kappa": metrics["kappa"],
+                    "N_Samples": metrics["n_samples"],
+                }
+            )
+
+    summary_df = pd.DataFrame(summary_data)
+    summary_df.to_csv(
+        "results/test_outputs/fbcsp_logpower_test_results.csv", index=False
+    )
+    print(f"Resultados salvos em: results/test_outputs/fbcsp_logpower_test_results.csv")

@@ -6,18 +6,17 @@ sys.path.append(str(Path(__file__).parent.parent.parent / "contexts"))
 from contexts.BCICIV2b import bciciv2b
 from bciflow.modules.tf.filterbank import filterbank
 from bciflow.modules.sf.csp import csp
-from bciflow.modules.fe.logpower import logpower
 from bciflow.modules.fs.mibif import MIBIF
 from sklearn.model_selection import StratifiedKFold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
 
-def run_fbcsp_logpower(subject_id: int, data_path="dataset/BCICIV2b/"):
+def run_fbcsp_pure(subject_id, data_path="dataset/BCICIV2b/"):
     """
-    Executa o metodo FBCSP (Filter Bank CSP) combinado com Log Power para classificacao de EEG.
+    Executa o metodo FBCSP puro sem extração de features adicionais.
     
-    Pipeline: Filter Bank -> CSP -> LogPower -> MIBIF -> LDA
-
+    Pipeline: Filter Bank -> CSP -> MIBIF -> LDA
+    
     Args:
         subject_id: ID do sujeito a ser processado (1-9)
         data_path: Caminho para o diretorio com os dados
@@ -42,8 +41,8 @@ def run_fbcsp_logpower(subject_id: int, data_path="dataset/BCICIV2b/"):
     sf = csp()
     eegdata = sf.fit_transform(eegdata)
     
-    # 3. LogPower (Feature Extraction)
-    eegdata = logpower(eegdata, flating=True)
+    # Usar diretamente as features do CSP (sem extração adicional)
+    # O CSP já produz features discriminativas
     
     # Validacao cruzada com 5 folds
     results = []
