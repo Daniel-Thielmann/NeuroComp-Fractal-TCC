@@ -5,25 +5,21 @@ import numpy as np
 from datetime import datetime
 import argparse
 
-# Adiciona o diretório raiz ao path do Python para importações
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))
 
-os.makedirs("results/comprehensive_results", exist_ok=True)
 
-# Configuração dos datasets disponíveis
 DATASETS_CONFIG = {
     "wcci2020": {
         "name": "WCCI2020",
         "subjects": 9,
         "description": "WCCI 2020 Competition Dataset (9 sujeitos)",
         "test_functions": {
-            "fractal": "tests.test_fractal.test_fractal_classification_wcci2020",
-            "logpower": "tests.test_logpower.test_logpower_classification_wcci2020",
-            "csp_fractal": "tests.test_csp_fractal.test_csp_fractal_classification_wcci2020",
-            "csp_logpower": "tests.test_csp_logpower.test_csp_logpower_pipeline",
-            "fbcsp_pure": "tests.test_fbcsp_pure.test_fbcsp_pure_pipeline",
-            "fbcsp_logpower": "tests.test_fbcsp_logpower.test_fbcsp_logpower_pipeline",
-            "fbcsp_fractal": "tests.test_fbcsp_fractal.test_fbcsp_fractal_classification_wcci2020",
+            "fractal": "tests.wcci2020.test_fractal.test_fractal_classification_wcci2020",
+            "logpower": "tests.wcci2020.test_logpower.test_logpower_classification_wcci2020",
+            "csp_fractal": "tests.wcci2020.test_csp_fractal.test_csp_fractal_classification_wcci2020",
+            "csp_logpower": "tests.wcci2020.test_csp_logpower.test_csp_logpower_pipeline",
+            "fbcsp_logpower": "tests.wcci2020.test_fbcsp_logpower.test_fbcsp_logpower_pipeline",
+            "fbcsp_fractal": "tests.wcci2020.test_fbcsp_fractal.test_fbcsp_fractal_classification_wcci2020",
         },
     },
     "bciciv2a": {
@@ -31,13 +27,12 @@ DATASETS_CONFIG = {
         "subjects": 9,
         "description": "BCI Competition IV Dataset 2a (9 sujeitos)",
         "test_functions": {
-            "fractal": "tests.test_fractal.test_fractal_classification_bciciv2a",
-            "logpower": "tests.test_logpower.test_logpower_classification_bciciv2a",
-            "csp_fractal": "tests.test_csp_fractal.test_csp_fractal_classification_bciciv2a",
-            "csp_logpower": "tests.test_csp_logpower.test_csp_logpower_classification_bciciv2a",
-            "fbcsp_pure": "tests.test_fbcsp_pure.test_fbcsp_pure_classification_bciciv2a",
-            "fbcsp_logpower": "tests.test_fbcsp_logpower.test_fbcsp_logpower_classification_bciciv2a",
-            "fbcsp_fractal": "tests.test_fbcsp_fractal.test_fbcsp_fractal_classification_bciciv2a",
+            "fractal": "tests.bciciv2a.test_fractal.test_fractal_classification_bciciv2a",
+            "logpower": "tests.bciciv2a.test_logpower.test_logpower_classification_bciciv2a",
+            "csp_fractal": "tests.bciciv2a.test_csp_fractal.test_csp_fractal_classification_bciciv2a",
+            "csp_logpower": "tests.bciciv2a.test_csp_logpower.test_csp_logpower_classification_bciciv2a",
+            "fbcsp_logpower": "tests.bciciv2a.test_fbcsp_logpower.test_fbcsp_logpower_classification_bciciv2a",
+            "fbcsp_fractal": "tests.bciciv2a.test_fbcsp_fractal.test_fbcsp_fractal_classification_bciciv2a",
         },
     },
     "bciciv2b": {
@@ -45,13 +40,12 @@ DATASETS_CONFIG = {
         "subjects": 9,
         "description": "BCI Competition IV Dataset 2b (9 sujeitos)",
         "test_functions": {
-            "fractal": "tests.test_fractal.test_fractal_classification_bciciv2b",
-            "logpower": "tests.test_logpower.test_logpower_classification_bciciv2b",
-            "csp_fractal": "tests.test_csp_fractal.test_csp_fractal_classification_bciciv2b",
-            "csp_logpower": "tests.test_csp_logpower.test_csp_logpower_classification_bciciv2b",
-            "fbcsp_pure": "tests.test_fbcsp_pure.test_fbcsp_pure_classification_bciciv2b",
-            "fbcsp_logpower": "tests.test_fbcsp_logpower.test_fbcsp_logpower_classification_bciciv2b",
-            "fbcsp_fractal": "tests.test_fbcsp_fractal.test_fbcsp_fractal_classification_bciciv2b",
+            "fractal": "tests.bciciv2b.test_fractal.test_fractal_classification_bciciv2b",
+            "logpower": "tests.bciciv2b.test_logpower.test_logpower_classification_bciciv2b",
+            "csp_fractal": "tests.bciciv2b.test_csp_fractal.test_csp_fractal_classification_bciciv2b",
+            "csp_logpower": "tests.bciciv2b.test_csp_logpower.test_csp_logpower_classification_bciciv2b",
+            "fbcsp_logpower": "tests.bciciv2b.test_fbcsp_logpower.test_fbcsp_logpower_classification_bciciv2b",
+            "fbcsp_fractal": "tests.bciciv2b.test_fbcsp_fractal.test_fbcsp_fractal_classification_bciciv2b",
         },
     },
 }
@@ -59,10 +53,10 @@ DATASETS_CONFIG = {
 
 def list_available_datasets():
     """Lista todos os datasets disponíveis."""
-    print("📋 DATASETS DISPONÍVEIS:")
+    print("DATASETS DISPONÍVEIS:")
     print("-" * 50)
     for key, config in DATASETS_CONFIG.items():
-        print(f"🔹 {key}: {config['name']}")
+        print(f"- {key}: {config['name']}")
         print(f"   {config['description']}")
         print()
 
@@ -107,7 +101,7 @@ def run_all_eeg_tests(dataset="wcci2020", methods=None):
     config = DATASETS_CONFIG[dataset]
 
     print("=" * 80)
-    print(f"🧠 TESTE COMPLETO DE CLASSIFICAÇÃO EEG - {config['name'].upper()}")
+    print(f"TESTE COMPLETO DE CLASSIFICAÇÃO EEG - {config['name'].upper()}")
     print("=" * 80)
     print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Dataset: {config['name']} ({config['subjects']} sujeitos)")
@@ -116,136 +110,39 @@ def run_all_eeg_tests(dataset="wcci2020", methods=None):
     print("Validação: 5-fold Cross Validation")
     print("-" * 80)
 
-    # Define métodos a executar
-    available_methods = {
-        "fractal": {
-            "name": "Fractal Puro",
-            "pipeline": "Filtro 8-30Hz → Higuchi Fractal → StandardScaler → LDA",
-            "emoji": "🔬",
-        },
-        "logpower": {
-            "name": "LogPower Puro",
-            "pipeline": "Filtro 8-30Hz → Log(Mean(X²)) → StandardScaler → LDA",
-            "emoji": "⚡",
-        },
-        "csp_fractal": {
-            "name": "CSP + Fractal",
-            "pipeline": "Filtro 8-30Hz → CSP (4 comp) → Higuchi Fractal → StandardScaler → LDA",
-            "emoji": "🔄",
-        },
-        "csp_logpower": {
-            "name": "CSP + LogPower",
-            "pipeline": "Filtro 8-30Hz → CSP (4 comp) → Log(Var) → StandardScaler → LDA",
-            "emoji": "🔄",
-        },
-        "fbcsp_pure": {
-            "name": "FBCSP + Pure",
-            "pipeline": "Filter Bank → CSP (2 comp extremos) → Log(Var) → MIBIF → StandardScaler → LDA",
-            "emoji": "🏆",
-        },
-        "fbcsp_logpower": {
-            "name": "FBCSP + LogPower",
-            "pipeline": "Filter Bank → CSP (4 comp) → Log(Energy) → MIBIF → StandardScaler → LDA",
-            "emoji": "🏆",
-        },
-        "fbcsp_fractal": {
-            "name": "FBCSP + Fractal",
-            "pipeline": "Filter Bank → CSP (4 comp) → [Fractal+Energy+Std] → MIBIF → StandardScaler → LDA",
-            "emoji": "🏆",
-        },
-    }
-
-    # Se métodos específicos foram solicitados, filtra apenas eles
-    if methods is not None:
-        methods_to_run = {k: v for k, v in available_methods.items() if k in methods}
-        if not methods_to_run:
-            raise ValueError(
-                f"Nenhum método válido especificado. Métodos disponíveis: {list(available_methods.keys())}"
-            )
-    else:
-        methods_to_run = available_methods
-
-    all_results = {}
-
-    # Executa cada método
-    for i, (method_key, method_info) in enumerate(methods_to_run.items(), 1):
-        print(f"\n{method_info['emoji']} {i}. TESTANDO: {method_info['name']}")
-        print(f"Pipeline: {method_info['pipeline']}")
-
+    # Executa os métodos definidos para o dataset e coleta os resultados
+    results = {}
+    selected_methods = (
+        methods if methods is not None else list(config["test_functions"].keys())
+    )
+    for method in selected_methods:
+        if method not in config["test_functions"]:
+            results[method] = {
+                "error": f"Método '{method}' não disponível para este dataset."
+            }
+            continue
+        func_path = config["test_functions"][method]
         try:
-            # Importa e executa a função de teste do método
-            if method_key in config["test_functions"]:
-                test_function = import_function_from_string(
-                    config["test_functions"][method_key]
-                )
-                results = test_function()
-                all_results[f"{method_info['name'].replace(' ', '_')}"] = (
-                    extract_summary_stats(results)
-                )
-                print(f"✅ {method_info['name']} concluído")
-            else:
-                print(
-                    f"⚠️  {method_info['name']} não implementado para dataset {dataset}"
-                )
-                all_results[f"{method_info['name'].replace(' ', '_')}"] = {
-                    "error": f"Não implementado para {dataset}"
-                }
-
+            func = import_function_from_string(func_path)
+            method_results = func()
+            # Garante que os resultados estejam pareados e completos
+            if not isinstance(method_results, dict):
+                results[method] = {"error": "Resultado do método não é um dicionário."}
+                continue
+            # Verifica se todos os sujeitos estão presentes
+            n_subjects = config["subjects"]
+            missing_subjects = [
+                f"P{idx:02d}"
+                for idx in range(1, n_subjects + 1)
+                if f"P{idx:02d}" not in method_results
+            ]
+            if missing_subjects:
+                results[method] = {"error": f"Sujeitos ausentes: {missing_subjects}"}
+                continue
+            results[method] = method_results
         except Exception as e:
-            print(f"❌ Erro no {method_info['name']}: {e}")
-            all_results[f"{method_info['name'].replace(' ', '_')}"] = {"error": str(e)}
-
-    # RESULTADOS FINAIS
-    print("\n" + "=" * 80)
-    print(f"📊 RESULTADOS FINAIS - RANKING DE PERFORMANCE ({config['name']})")
-    print("=" * 80)
-
-    # Prepara dados para ranking
-    valid_results = []
-    for method, stats in all_results.items():
-        if "error" not in stats and "mean_accuracy" in stats:
-            valid_results.append(
-                {
-                    "Método": method,
-                    "Acurácia Média (%)": f"{stats['mean_accuracy']*100:.2f}",
-                    "Desvio Padrão (%)": f"{stats['std_accuracy']*100:.2f}",
-                    "Kappa Médio": f"{stats['mean_kappa']:.4f}",
-                    "Melhor (%)": f"{stats['max_accuracy']*100:.2f}",
-                    "Pior (%)": f"{stats['min_accuracy']*100:.2f}",
-                }
-            )
-
-    # Ordena por acurácia média (decrescente)
-    valid_results.sort(
-        key=lambda x: float(x["Acurácia Média (%)"].replace("%", "")), reverse=True
-    )
-
-    # Exibe ranking
-    print(
-        f"{'Rank':<4} {'Método':<18} {'Acurácia':<12} {'±Desvio':<10} {'Kappa':<8} {'Melhor':<8} {'Pior':<8}"
-    )
-    print("-" * 75)
-
-    for i, result in enumerate(valid_results, 1):
-        emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "  "
-        print(
-            f"{emoji}{i:<3} {result['Método']:<18} {result['Acurácia Média (%)']:<12} "
-            f"±{result['Desvio Padrão (%)']:<9} {result['Kappa Médio']:<8} "
-            f"{result['Melhor (%)']:<8} {result['Pior (%)']:<8}"
-        )
-
-    # Exibe erros se houver
-    errors = [method for method, stats in all_results.items() if "error" in stats]
-    if errors:
-        print(f"\n❌ MÉTODOS COM ERRO: {', '.join(errors)}")
-
-    # Salva resultados em CSV
-    save_comprehensive_results(all_results, valid_results, dataset)
-
-    print("\n✅ TESTE COMPLETO FINALIZADO!")
-    print(f"📁 Resultados salvos em: results/comprehensive_results/{dataset}/")
-
-    return all_results
+            results[method] = {"error": str(e)}
+    return results
 
 
 def extract_summary_stats(results):
@@ -367,7 +264,6 @@ def parse_arguments():
             "logpower",
             "csp_fractal",
             "csp_logpower",
-            "fbcsp_pure",
             "fbcsp_logpower",
             "fbcsp_fractal",
         ],
@@ -376,7 +272,6 @@ def parse_arguments():
         "  logpower: LogPower puro\n"
         "  csp_fractal: CSP + Fractal\n"
         "  csp_logpower: CSP + LogPower\n"
-        "  fbcsp_pure: FBCSP + Pure\n"
         "  fbcsp_logpower: FBCSP + LogPower\n"
         "  fbcsp_fractal: FBCSP + Fractal",
     )
@@ -395,76 +290,6 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main():
-    """Função principal que executa todos os testes."""
-    try:
-        args = parse_arguments()
-
-        # Lista datasets se solicitado
-        if args.list_datasets:
-            list_available_datasets()
-            return
-
-        # Valida dataset
-        if args.dataset not in DATASETS_CONFIG:
-            print(f"❌ Erro: Dataset '{args.dataset}' não encontrado.")
-            list_available_datasets()
-            return
-
-        # Executa testes
-        if not args.quiet:
-            print(f"🚀 Iniciando testes com dataset: {args.dataset}")
-            if args.methods:
-                print(f"📝 Métodos específicos: {', '.join(args.methods)}")
-            print()
-
-        all_results = run_all_eeg_tests(dataset=args.dataset, methods=args.methods)
-
-        # Exibe resumo final simples
-        if not args.quiet:
-            print("\n" + "=" * 50)
-            print("📋 RESUMO EXECUTIVO")
-            print("=" * 50)
-
-            valid_methods = 0
-            error_methods = 0
-
-            for method, stats in all_results.items():
-                if "error" in stats:
-                    error_methods += 1
-                else:
-                    valid_methods += 1
-
-            print(f"✅ Métodos executados com sucesso: {valid_methods}")
-            print(f"❌ Métodos com erro: {error_methods}")
-            print(f"📊 Total de métodos testados: {len(all_results)}")
-            print(f"🗂️  Dataset usado: {DATASETS_CONFIG[args.dataset]['name']}")
-
-            if valid_methods > 0:
-                # Encontra melhor método
-                best_method = None
-                best_accuracy = 0
-
-                for method, stats in all_results.items():
-                    if "error" not in stats and "mean_accuracy" in stats:
-                        if stats["mean_accuracy"] > best_accuracy:
-                            best_accuracy = stats["mean_accuracy"]
-                            best_method = method
-
-                if best_method:
-                    print(f"🏆 Melhor método: {best_method} ({best_accuracy*100:.2f}%)")
-
-        return all_results
-
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Execução interrompida pelo usuário.")
-    except Exception as e:
-        print(f"\n\n❌ Erro crítico na execução: {e}")
-        import traceback
-
-        traceback.print_exc()
-
-
 # Função auxiliar para compatibilidade com uso direto
 def run_wcci2020_tests():
     """Executa testes especificamente no dataset WCCI2020 (compatibilidade)."""
@@ -479,6 +304,136 @@ def run_bciciv2a_tests():
 def run_bciciv2b_tests():
     """Executa testes especificamente no dataset BCI Competition IV 2b."""
     return run_all_eeg_tests(dataset="bciciv2b")
+
+
+# Função principal interativa
+def main():
+    try:
+        print("Selecione o dataset para rodar os testes:")
+        print("[w] WCCI2020")
+        print("[a] BCICIV2a")
+        print("[b] BCICIV2b")
+        dataset_input = (
+            input("Digite a letra correspondente ao dataset (w/a/b): ").strip().lower()
+        )
+        if dataset_input == "w":
+            dataset = "wcci2020"
+        elif dataset_input == "a":
+            dataset = "bciciv2a"
+        elif dataset_input == "b":
+            dataset = "bciciv2b"
+        else:
+            print("[ERRO] Opção inválida. Use 'w', 'a' ou 'b'.")
+            return
+
+        print(f"Iniciando testes com dataset: {DATASETS_CONFIG[dataset]['name']}")
+        all_results_raw = run_all_eeg_tests(dataset=dataset)
+
+        # Extrai estatísticas resumidas para cada método
+        all_results = {}
+        for method, stats in all_results_raw.items():
+            if "error" not in stats:
+                summary = extract_summary_stats(stats)
+                stats.update(summary)
+            all_results[method] = stats
+
+        print("\n" + "=" * 50)
+        print("RESUMO EXECUTIVO")
+        print("=" * 50)
+
+        valid_methods = 0
+        error_methods = 0
+        failed_methods = []
+        for method, stats in all_results.items():
+            if "error" in stats:
+                error_methods += 1
+                failed_methods.append((method, stats["error"]))
+            else:
+                valid_methods += 1
+
+        print(f"[OK] Métodos executados com sucesso: {valid_methods}")
+        print(f"[ERRO] Métodos com erro: {error_methods}")
+        print(f"Total de métodos testados: {len(all_results)}")
+        print(f"Dataset usado: {DATASETS_CONFIG[dataset]['name']}")
+
+        if failed_methods:
+            print("\nMétodos que falharam:")
+            for method, msg in failed_methods:
+                print(f"- {method}: {msg}")
+
+        # Salva resultados em CSVs conforme padrão: results/dataset/metodo/evaluate e results/dataset/metodo/training
+        for method, stats in all_results.items():
+            if "error" not in stats:
+                eval_dir = f"results/{dataset}/{method}/evaluate"
+                train_dir = f"results/{dataset}/{method}/training"
+                os.makedirs(eval_dir, exist_ok=True)
+                os.makedirs(train_dir, exist_ok=True)
+                eval_rows = []
+                train_rows = []
+                for subject, metrics in stats.items():
+                    if isinstance(metrics, dict) and "error" not in metrics:
+                        # Garante nome P01, P02, ... para todos os prints e CSVs
+                        subj_num = "".join(filter(str.isdigit, subject))
+                        subject_id = f"P{int(subj_num):02d}" if subj_num else subject
+                        # Salva CSV de avaliação (test)
+                        eval_df = pd.DataFrame(
+                            {
+                                "Subject": [subject_id],
+                                "Accuracy": [metrics.get("accuracy", None)],
+                                "Kappa": [metrics.get("kappa", None)],
+                                "N_Samples": [metrics.get("n_samples", None)],
+                            }
+                        )
+                        eval_df.to_csv(
+                            f"{eval_dir}/{subject_id}_evaluate.csv", index=False
+                        )
+                        eval_rows.append(eval_df.iloc[0])
+                        # Salva CSV de treinamento (train)
+                        train_df = pd.DataFrame(
+                            {
+                                "Subject": [subject_id],
+                                "Accuracy": [metrics.get("train_accuracy", None)],
+                                "Kappa": [metrics.get("train_kappa", None)],
+                                "N_Samples": [metrics.get("n_samples", None)],
+                            }
+                        )
+                        train_df.to_csv(
+                            f"{train_dir}/{subject_id}_training.csv", index=False
+                        )
+                        train_rows.append(train_df.iloc[0])
+                # Salva CSV geral do método (soma dos sujeitos) na pasta do método
+                if eval_rows:
+                    eval_all_df = pd.DataFrame(eval_rows)
+                    eval_all_df.to_csv(
+                        f"results/{dataset}/{method}/evaluate_results.csv", index=False
+                    )
+                if train_rows:
+                    train_all_df = pd.DataFrame(train_rows)
+                    train_all_df.to_csv(
+                        f"results/{dataset}/{method}/training_results.csv", index=False
+                    )
+
+        # Mostra o melhor método
+        if valid_methods > 0:
+            best_method = None
+            best_accuracy = 0
+            for method, stats in all_results.items():
+                if "error" not in stats and "mean_accuracy" in stats:
+                    if stats["mean_accuracy"] > best_accuracy:
+                        best_accuracy = stats["mean_accuracy"]
+                        best_method = method
+            if best_method:
+                print(f"Melhor método: {best_method} ({best_accuracy*100:.2f}%)")
+
+        return all_results
+
+    except KeyboardInterrupt:
+        print("\n\nExecução interrompida pelo usuário.")
+    except Exception as e:
+        print(f"\n\n[ERRO] Erro crítico na execução: {e}")
+        import traceback
+
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

@@ -12,3 +12,5 @@ dataset/BCICIV2b
 __pycache__/
 
 bcikit
+
+results/manuscript

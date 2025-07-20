@@ -122,7 +122,7 @@ def bciciv2a(
 
         # Debug: verificar chaves disponíveis
         available_keys = [k for k in raw.keys() if not k.startswith("__")]
-        print(f"Chaves disponíveis em {file_name}: {available_keys}")
+        # print removido
 
         # Tentar diferentes nomes possíveis para os dados EEG
         data_key = None
@@ -146,7 +146,7 @@ def bciciv2a(
             )
 
         rawData_ = raw[data_key]
-        print(f"Shape dos dados em {file_name}: {rawData_.shape}")
+        # print removido
 
         # Tentar diferentes nomes possíveis para os labels
         label_key = None
@@ -164,8 +164,7 @@ def bciciv2a(
         rawLabels_ = np.reshape(raw[label_key], -1)
 
         # Verificar o formato dos dados e ajustar conforme necessário
-        print(f"Formato original dos dados: {rawData_.shape}")
-        print(f"Formato original dos labels: {rawLabels_.shape}")
+        # print removido
 
         # Para dados contínuos do BCICIV2a, precisamos segmentar em trials
         # Vamos assumir que os dados são contínuos e precisam ser segmentados
@@ -176,7 +175,7 @@ def bciciv2a(
             # Buscar informação de eventos se disponível
             if "events" in raw:
                 events = raw["events"]
-                print(f"Eventos encontrados: shape={events.shape}")
+                # print removido
 
             # Para BCICIV2a, vamos usar uma segmentação fixa baseada nos labels
             # Cada trial tem aproximadamente 4 segundos (1000 samples a 250Hz)
@@ -187,19 +186,15 @@ def bciciv2a(
             trial_length = int(4 * sfreq)  # 4 segundos por trial
             n_trials = len(rawLabels_)
 
-            print(
-                f"Segmentando {n_samples} amostras em {n_trials} trials de {trial_length} amostras cada"
-            )
+            # print removido
 
             # Verificar se temos amostras suficientes
             total_needed = n_trials * trial_length
             if n_samples < total_needed:
-                print(
-                    f"Aviso: Não há amostras suficientes. Disponível: {n_samples}, Necessário: {total_needed}"
-                )
+                # print removido
                 # Ajustar o comprimento do trial
                 trial_length = n_samples // n_trials
-                print(f"Ajustando comprimento do trial para {trial_length} amostras")
+                # print removido
 
             # Segmentar os dados em trials
             trials = []
@@ -220,7 +215,7 @@ def bciciv2a(
 
             # Converter para array (trials, channels, samples)
             rawData_ = np.stack(trials, axis=0)
-            print(f"Dados segmentados: {rawData_.shape}")
+            # print removido
 
         elif len(rawData_.shape) == 3:
             # Já tem o formato correto (trials, channels, samples)
@@ -228,7 +223,7 @@ def bciciv2a(
         else:
             raise ValueError(f"Formato inesperado dos dados: {rawData_.shape}")
 
-        print(f"Formato após processamento: {rawData_.shape}")
+        # print removido
         rawData.append(rawData_)
         rawLabels.append(rawLabels_)
 
@@ -256,7 +251,7 @@ def bciciv2a(
     else:
         # Para múltiplas sessões, encontrar o menor tamanho temporal comum
         min_samples = min(data.shape[-1] for data in rawData)
-        print(f"Cortando dados para {min_samples} amostras temporais")
+        # print removido
 
         # Cortar todos os dados para o mesmo tamanho
         rawData_trimmed = [data[:, :, :min_samples] for data in rawData]
@@ -267,7 +262,7 @@ def bciciv2a(
         )  # Concatenar ao longo da dimensão de trials
         y = np.concatenate(rawLabels)
 
-    print(f"Shape final após processamento: X={X.shape}, y={y.shape}")
+    # print removido
 
     # Adicionar dimensão extra se necessário para compatibilidade
     if len(X.shape) == 3:
