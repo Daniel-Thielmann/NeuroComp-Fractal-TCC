@@ -1,3 +1,18 @@
+import numpy as np
+import os
+import scipy.io
+
+
+# Classe compatível com bciflow para retorno dos dados
+class EEGData:
+    def __init__(self, X, y, sfreq, ch_names, y_dict):
+        self.X = X  # (n_trials, n_channels, n_samples)
+        self.y = y  # (n_trials,)
+        self.sfreq = sfreq
+        self.ch_names = ch_names
+        self.y_dict = y_dict
+
+
 """
 BCICIV2b.py
 
@@ -13,10 +28,15 @@ scipy
 
 """
 
-import numpy as np
-import pandas as pd
-import scipy.io
-import os
+
+# Classe compatível com bciflow para retorno dos dados
+class EEGData:
+    def __init__(self, X, y, sfreq, ch_names, y_dict):
+        self.X = X  # (n_trials, n_channels, n_samples)
+        self.y = y  # (n_trials,)
+        self.sfreq = sfreq
+        self.ch_names = ch_names
+        self.y_dict = y_dict
 
 
 def bciciv2b(
@@ -67,41 +87,9 @@ def bciciv2b(
     if path[-1] != "/":
         path += "/"
 
-    ch_names = [
-        "Fp1",
-        "Fp2",
-        "F7",
-        "F3",
-        "Fz",
-        "F4",
-        "F8",
-        "FC5",
-        "FC1",
-        "FC2",
-        "FC6",
-        "T7",
-        "C3",
-        "Cz",
-        "C4",
-        "T8",
-        "CP5",
-        "CP1",
-        "CP2",
-        "CP6",
-        "P7",
-        "P3",
-        "Pz",
-        "P4",
-        "P8",
-        "POz",
-    ]
-    # O dataset BCICIV2b tem 22 canais, mas alguns arquivos podem ter 25 (com POz e outros).
-    # Para garantir compatibilidade, seleciona apenas os 22 primeiros canais padrão.
-    ch_names = np.array(ch_names[:22])
-    tmin = 0.0  # 'sfreq' is set to 250. This represents the sampling frequency of the EEG data.
-    # 'events' is a dictionary that maps event names to their corresponding time intervals.
-    # 'ch_names' is a list of channel names.
-    # 'tmin' is set to 0, representing the starting time of the EEG data.
+    ch_names = ["EEG:C3", "EEG:Cz", "EEG:C4"]
+    ch_names = np.array(ch_names)
+    tmin = 0.0
 
     if session_list is None:
         session_list = ["01T", "02T", "03T", "04E", "05E"]
@@ -117,9 +105,10 @@ def bciciv2b(
                 continue
             raw = scipy.io.loadmat(path + file_name)
             data = raw["signals"]
-            # Se o arquivo tiver mais de 22 canais, seleciona apenas os 22 primeiros
-            if data.shape[0] > 22:
-                data = data[:22, :]
+            if data.shape[0] != 3:
+                raise ValueError(
+                    f"Arquivo {file_name} possui {data.shape[0]} canais, esperado 3 canais (EEG:C3, EEG:Cz, EEG:C4)."
+                )
             sfreq = (
                 raw["sfreq"].item() if hasattr(raw["sfreq"], "item") else raw["sfreq"]
             )
@@ -128,27 +117,18 @@ def bciciv2b(
             unique_codes = np.unique(events[:, 2])
             event_mapping = {}
             if 4 in unique_codes and 5 in unique_codes:
-                count_4 = np.sum(events[:, 2] == 4)
-                count_5 = np.sum(events[:, 2] == 5)
-                if count_4 > 10 and count_5 > 10:
-                    event_mapping = {4: 1, 5: 2}
-            if not event_mapping and 1 in unique_codes and 2 in unique_codes:
-                count_1 = np.sum(events[:, 2] == 1)
-                count_2 = np.sum(events[:, 2] == 2)
-                if count_1 > 10 and count_2 > 10:
-                    event_mapping = {1: 1, 2: 2}
-            if not event_mapping and 10 in unique_codes and 11 in unique_codes:
-                count_10 = np.sum(events[:, 2] == 10)
-                count_11 = np.sum(events[:, 2] == 11)
-                if count_10 > 10 and count_11 > 10:
-                    event_mapping = {10: 1, 11: 2}
-            if not event_mapping:
+                event_mapping = {4: 1, 5: 2}
+            elif 1 in unique_codes and 2 in unique_codes:
+                event_mapping = {1: 1, 2: 2}
+            elif 10 in unique_codes and 11 in unique_codes:
+                event_mapping = {10: 1, 11: 2}
+            else:
                 continue
             trial_events = []
             trial_labels = []
             for i, event in enumerate(events):
                 event_time, _, event_code = event
-                if event_code in event_mapping:
+                if event_code in event_mapping and event_mapping[event_code] in [1, 2]:
                     trial_events.append(event_time)
                     trial_labels.append(event_mapping[event_code])
             if len(trial_events) == 0:
@@ -158,8 +138,9 @@ def bciciv2b(
             trials = []
             valid_labels = []
             for i, (event_time, label) in enumerate(zip(trial_events, trial_labels)):
-                start_sample = int(event_time)
-                end_sample = start_sample + trial_length
+                # Volta event_time e sfreq para float
+                start_sample = int(event_time + 3 * sfreq)
+                end_sample = start_sample + int(4 * sfreq)
                 if end_sample <= data.shape[1]:
                     trial_data = data[:, start_sample:end_sample]
                     trials.append(trial_data)
@@ -168,7 +149,7 @@ def bciciv2b(
                 trials_array = np.stack(trials, axis=0)
                 rawData.append(trials_array)
                 rawLabels.extend(valid_labels)
-        except Exception:
+        except Exception as e:
             continue
 
     # Verificar se temos dados para processar
@@ -176,41 +157,23 @@ def bciciv2b(
         raise ValueError("No data was loaded from any file")
 
     # Concatenate all data
-    X = np.concatenate(rawData, axis=0)
+    X = np.concatenate(rawData, axis=0)  # (n_trials, n_channels, n_samples)
     y = np.array(rawLabels)
 
-    # Adicionar dimensão extra se necessário para compatibilidade
-    if len(X.shape) == 3:
-        X = X[:, np.newaxis, :, :]  # (trials, 1, channels, samples)
+    # Padronizar shape para [n_trials, 1, n_channels, n_samples]
+    X = X[:, np.newaxis, :, :]  # Adiciona dimensão extra igual ao bciflow
 
     # Mapear labels para strings
     labels_dict = {1: "left-hand", 2: "right-hand"}
-
-    # Filtrar apenas labels válidos (que existem no dicionário)
-    valid_labels_mask = np.isin(y, list(labels_dict.keys()))
-    if not np.any(valid_labels_mask):
-        raise ValueError(f"No valid labels found. Unique labels: {np.unique(y)}")
-
-    X = X[valid_labels_mask]
-    y = y[valid_labels_mask]
-
-    # Converter labels numéricos para strings
-    y_strings = np.array([labels_dict[i] for i in y])
+    y_strings = np.array([labels_dict[i] for i in y if i in labels_dict])
 
     # Filtrar apenas os labels solicitados
     selected_labels = np.isin(y_strings, labels)
-    X, y_strings = X[selected_labels], y_strings[selected_labels]
+    X = X[selected_labels]
+    y_strings = y_strings[selected_labels]
 
     # Criar dicionário de mapeamento e converter para índices
     y_dict = {labels[i]: i for i in range(len(labels))}
     y = np.array([y_dict[i] for i in y_strings])
 
-    return {
-        "X": X,
-        "y": y,
-        "sfreq": sfreq,
-        "y_dict": y_dict,
-        "events": events,
-        "ch_names": ch_names,
-        "tmin": tmin,
-    }
+    return EEGData(X, y, int(round(sfreq)), ch_names, y_dict)

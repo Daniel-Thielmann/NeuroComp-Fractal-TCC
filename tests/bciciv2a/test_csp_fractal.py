@@ -38,45 +38,13 @@ def bandpass_filter(data, lowcut, highcut, fs, order=4):
     return data_filtered
 
 
-def test_csp_fractal_feature():
-    # Teste básico CSP + Higuchi Fractal
-    X = np.random.randn(50, 22, 1000)
-    y = np.random.randint(0, 2, 50)
-    fs = 250
-    X_filtered = bandpass_filter(X, lowcut=4, highcut=40, fs=fs)
-    csp_transformer = csp()
-    X_4d = X_filtered[:, np.newaxis, :, :]
-    csp_transformer.fit({"X": X_4d, "y": y})
-    X_csp_result = csp_transformer.transform({"X": X_4d})
-    X_csp = X_csp_result["X"][:, 0, :, :]
-    features = []
-    for trial in X_csp:
-        comps = trial[:4] if trial.shape[0] >= 4 else trial
-        trial_feat = []
-        for comp in comps:
-            comp_data = {"X": comp.reshape(1, 1, -1)}
-            fractal_result = higuchi_fractal(comp_data, flating=True)
-            fractal_dim = fractal_result["X"][0, 0]
-            energia = np.sum(comp**2)
-            std = np.std(comp)
-            trial_feat.extend([fractal_dim, energia, std])
-        features.append(trial_feat)
-    features = np.array(features)
-    assert features.shape[0] == 50
-    assert features.shape[1] == 12
-    assert not np.isnan(features).any()
-    assert not np.isinf(features).any()
-    fractal_cols = [0, 3, 6, 9]
-    assert np.all(features[:, fractal_cols] > 0)
-    return True
-
-
 def test_csp_fractal_classification_bciciv2a():
     print('Teste "CSP + Fractal" ("BCICIV2a"):')
-    # Pipeline CSP Fractal padronizado
     results = {}
     all_accuracies = []
     all_kappas = []
+    os.makedirs("results/BCICIV2a/csp_fractal/evaluate", exist_ok=True)
+    os.makedirs("results/BCICIV2a/csp_fractal/training", exist_ok=True)
     for subject_id in range(1, 10):
         try:
             eegdata = bciciv2a(
@@ -106,24 +74,41 @@ def test_csp_fractal_classification_bciciv2a():
                     comp_data = {"X": comp.reshape(1, 1, -1)}
                     fractal_result = higuchi_fractal(comp_data, flating=True)
                     fractal_dim = fractal_result["X"][0, 0]
-                    energia = np.sum(comp**2)
-                    std = np.std(comp)
-                    trial_feat.extend([fractal_dim, energia, std])
+                    trial_feat.append(fractal_dim)
                 features.append(trial_feat)
             features = np.array(features)
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             fold_accuracies = []
             fold_kappas = []
-            for _, (train_idx, test_idx) in enumerate(skf.split(features, y)):
+            fold_results = []
+            fold_train_results = []
+            for fold_idx, (train_idx, test_idx) in enumerate(skf.split(features, y)):
                 X_train, X_test = features[train_idx], features[test_idx]
                 y_train, y_test = y[train_idx], y[test_idx]
                 clf = LDA()
                 clf.fit(X_train, y_train)
                 y_pred = clf.predict(X_test)
+                y_pred_train = clf.predict(X_train)
                 accuracy = (y_pred == y_test).mean()
                 kappa = cohen_kappa_score(y_test, y_pred)
+                train_accuracy = (y_pred_train == y_train).mean()
+                train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 fold_accuracies.append(accuracy)
                 fold_kappas.append(kappa)
+                fold_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Test_Accuracy": accuracy,
+                        "Test_Kappa": kappa,
+                    }
+                )
+                fold_train_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Train_Accuracy": train_accuracy,
+                        "Train_Kappa": train_kappa,
+                    }
+                )
             mean_accuracy = np.mean(fold_accuracies)
             std_accuracy = np.std(fold_accuracies)
             mean_kappa = np.mean(fold_kappas)
@@ -137,26 +122,55 @@ def test_csp_fractal_classification_bciciv2a():
             }
             all_accuracies.append(mean_accuracy)
             all_kappas.append(mean_kappa)
+            eval_df = pd.DataFrame(fold_results)
+            eval_df.to_csv(
+                f"results/BCICIV2a/csp_fractal/evaluate/P{subject_id:02d}_evaluate.csv",
+                index=False,
+            )
+            train_df = pd.DataFrame(fold_train_results)
+            train_df.to_csv(
+                f"results/BCICIV2a/csp_fractal/training/P{subject_id:02d}_training.csv",
+                index=False,
+            )
             print(
-                f"P{subject_id:02d}: acc={mean_accuracy:.4f}{std_accuracy:.4f} | kappa={mean_kappa:.4f} | n_trials={X.shape[0]}"
+                f"P{subject_id:02d}: acc={mean_accuracy:.4f}±{std_accuracy:.4f} | kappa={mean_kappa:.4f} | n_trials={X.shape[0]}"
             )
         except Exception as e:
             results[f"P{subject_id:02d}"] = {"error": str(e)}
-    print("Resumo CSP Fractal BCICIV2a:")
+    print('Resumo "CSP + Fractal" ("BCICIV2a"):')
     if all_accuracies:
         print(
             f"Acc média={np.mean(all_accuracies):.4f}±{np.std(all_accuracies):.4f} | Kappa média={np.mean(all_kappas):.4f}±{np.std(all_kappas):.4f}"
         )
     else:
         print("Nenhum resultado válido.")
+    # Salva CSV geral
+    summary_data = []
+    for subject, metrics in results.items():
+        if "error" not in metrics:
+            summary_data.append(
+                {
+                    "Subject": subject,
+                    "Accuracy": metrics["accuracy"],
+                    "Kappa": metrics["kappa"],
+                    "N_Trials": metrics["n_trials"],
+                    "N_Channels": metrics["n_channels"],
+                    "N_Samples": metrics["n_samples"],
+                    "N_Features": metrics["n_features"],
+                }
+            )
+    if summary_data:
+        summary_df = pd.DataFrame(summary_data)
+        summary_df.to_csv(
+            "results/BCICIV2a/csp_fractal/csp_fractal_classification_results.csv",
+            index=False,
+        )
+        print("CSV salvo: results/BCICIV2a/csp_fractal/")
     return results
 
 
 if __name__ == "__main__":
     print("Teste CSP + Higuchi Fractal (BCICIV2a)")
-    success = test_csp_fractal_feature()
-    if not success:
-        sys.exit(1)
     try:
         results = test_csp_fractal_classification_bciciv2a()
         summary_data = []

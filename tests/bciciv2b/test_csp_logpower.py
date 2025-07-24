@@ -51,9 +51,9 @@ def test_csp_logpower_classification_bciciv2b():
                 labels=["left-hand", "right-hand"],
                 path="dataset/BCICIV2b/",
             )
-            X = eegdata["X"]
-            y = eegdata["y"]
-            sfreq = eegdata["sfreq"]
+            X = eegdata.X
+            y = eegdata.y
+            sfreq = eegdata.sfreq
             if X.ndim == 4 and X.shape[1] == 1:
                 X = X.squeeze(1)
             if X.shape[0] < 10:

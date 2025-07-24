@@ -40,21 +40,14 @@ def test_csp_fractal_classification_bciciv2b():
     from scipy.signal import butter, filtfilt
 
     def bandpass_filter(data, low_freq, high_freq, sfreq=250, order=4):
-        nyquist = sfreq / 2
-        low = low_freq / nyquist
-        high = high_freq / nyquist
-        b, a = butter(order, [low, high], btype="band")
-        data_filtered = np.zeros_like(data)
-        for trial in range(data.shape[0]):
-            for channel in range(data.shape[1]):
-                data_filtered[trial, channel, :] = filtfilt(
-                    b, a, data[trial, channel, :]
-                )
-        return data_filtered
+        print('Teste "CSP + Fractal" ("BCICIV2b"):')
 
+    # Bloco válido para corrigir indentação
     results = {}
     all_accuracies = []
     all_kappas = []
+    os.makedirs("results/BCICIV2b/csp_fractal/evaluate", exist_ok=True)
+    os.makedirs("results/BCICIV2b/csp_fractal/training", exist_ok=True)
     for subject_id in range(1, 10):
         try:
             eegdata = bciciv2b(
@@ -63,15 +56,26 @@ def test_csp_fractal_classification_bciciv2b():
                 labels=["left-hand", "right-hand"],
                 path="dataset/BCICIV2b/",
             )
-            X = eegdata["X"]
-            y = eegdata["y"]
-            sfreq = eegdata["sfreq"]
+            X = eegdata.X
+            y = eegdata.y
+            sfreq = eegdata.sfreq
             if X.ndim == 4 and X.shape[1] == 1:
                 X = X.squeeze(1)
             if X.shape[0] < 10:
-                results[f"P{subject_id:02d}"] = {"error": "Poucos trials"}
                 continue
-            X_filtered = bandpass_filter(X, 4, 40, int(sfreq))
+            from scipy.signal import cheby2, filtfilt
+
+            nyquist = 0.5 * sfreq
+            low = 4 / nyquist
+            high = 40 / nyquist
+            b, a = cheby2(4, 20, [low, high], btype="band")
+            data_filtered = np.zeros_like(X)
+            for trial in range(X.shape[0]):
+                for channel in range(X.shape[1]):
+                    data_filtered[trial, channel, :] = filtfilt(
+                        b, a, X[trial, channel, :]
+                    )
+            X_filtered = data_filtered
             csp_transformer = csp()
             X_4d = X_filtered[:, np.newaxis, :, :]
             csp_transformer.fit({"X": X_4d, "y": y})
@@ -79,63 +83,104 @@ def test_csp_fractal_classification_bciciv2b():
             X_csp = X_csp_result["X"][:, 0, :, :]
             features = []
             for trial in X_csp:
+                comps = trial[:4] if trial.shape[0] >= 4 else trial
                 trial_feat = []
-                for comp in trial:
+                for comp in comps:
                     comp_data = {"X": comp.reshape(1, 1, -1)}
-                    fractal_result = higuchi_fractal(comp_data, flating=True, kmax=10)
+                    fractal_result = higuchi_fractal(comp_data, flating=True)
                     fractal_dim = fractal_result["X"][0, 0]
-                    energy = np.sum(comp**2)
-                    std_val = np.std(comp)
-                    trial_feat.extend([fractal_dim, energy, std_val])
+                    trial_feat.append(fractal_dim)
                 features.append(trial_feat)
             features = np.array(features)
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             fold_accuracies = []
             fold_kappas = []
+            fold_results = []
+            fold_train_results = []
             for fold_idx, (train_idx, test_idx) in enumerate(skf.split(features, y)):
                 X_train, X_test = features[train_idx], features[test_idx]
                 y_train, y_test = y[train_idx], y[test_idx]
                 clf = LDA()
                 clf.fit(X_train, y_train)
                 y_pred = clf.predict(X_test)
+                y_pred_train = clf.predict(X_train)
                 accuracy = (y_pred == y_test).mean()
                 kappa = cohen_kappa_score(y_test, y_pred)
+                train_accuracy = (y_pred_train == y_train).mean()
+                train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 fold_accuracies.append(accuracy)
                 fold_kappas.append(kappa)
+                fold_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Test_Accuracy": accuracy,
+                        "Test_Kappa": kappa,
+                    }
+                )
+                fold_train_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Train_Accuracy": train_accuracy,
+                        "Train_Kappa": train_kappa,
+                    }
+                )
             mean_accuracy = np.mean(fold_accuracies)
+            std_accuracy = np.std(fold_accuracies)
             mean_kappa = np.mean(fold_kappas)
             results[f"P{subject_id:02d}"] = {
                 "accuracy": mean_accuracy,
                 "kappa": mean_kappa,
                 "n_trials": X.shape[0],
+                "n_channels": X.shape[1],
+                "n_samples": X.shape[2],
+                "n_features": features.shape[1],
             }
             all_accuracies.append(mean_accuracy)
             all_kappas.append(mean_kappa)
-            eval_df = pd.DataFrame(
-                {
-                    "Fold": list(range(1, 6)),
-                    "Accuracy": fold_accuracies,
-                    "Kappa": fold_kappas,
-                }
-            )
-            os.makedirs("results/BCICIV2b/csp_fractal/evaluate", exist_ok=True)
+            eval_df = pd.DataFrame(fold_results)
             eval_df.to_csv(
-                f"results/BCICIV2b/csp_fractal/evaluate/P{subject_id:02d}.csv",
+                f"results/BCICIV2b/csp_fractal/evaluate/P{subject_id:02d}_evaluate.csv",
                 index=False,
+            )
+            train_df = pd.DataFrame(fold_train_results)
+            train_df.to_csv(
+                f"results/BCICIV2b/csp_fractal/training/P{subject_id:02d}_training.csv",
+                index=False,
+            )
+            print(
+                f"P{subject_id:02d}: acc={mean_accuracy:.4f}±{std_accuracy:.4f} | kappa={mean_kappa:.4f} | n_trials={X.shape[0]}"
             )
         except Exception as e:
             results[f"P{subject_id:02d}"] = {"error": str(e)}
-    for subject, metrics in results.items():
-        if "error" in metrics:
-            continue
+    print('Resumo "CSP + Fractal" ("BCICIV2b"):')
+    if all_accuracies:
         print(
-            f"{subject}: acc={metrics['accuracy']:.4f}±{np.std(all_accuracies):.4f} | kappa={metrics['kappa']:.4f} | n_trials={metrics['n_trials']}"
+            f"Acc média={np.mean(all_accuracies):.4f}±{np.std(all_accuracies):.4f} | Kappa média={np.mean(all_kappas):.4f}±{np.std(all_kappas):.4f}"
         )
-    print(f'Resumo "CSP + Fractal" (BCICIV2b):')
-    print(
-        f"Acc média={np.mean(all_accuracies):.4f}±{np.std(all_accuracies):.4f} | Kappa média={np.mean(all_kappas):.4f}±{np.std(all_kappas):.4f}"
-    )
-    print("CSV salvo: results/BCICIV2b/csp_fractal/")
+    else:
+        print("Nenhum resultado válido.")
+    # Salva CSV geral
+    summary_data = []
+    for subject, metrics in results.items():
+        if "error" not in metrics:
+            summary_data.append(
+                {
+                    "Subject": subject,
+                    "Accuracy": metrics["accuracy"],
+                    "Kappa": metrics["kappa"],
+                    "N_Trials": metrics["n_trials"],
+                    "N_Channels": metrics["n_channels"],
+                    "N_Samples": metrics["n_samples"],
+                    "N_Features": metrics["n_features"],
+                }
+            )
+    if summary_data:
+        summary_df = pd.DataFrame(summary_data)
+        summary_df.to_csv(
+            "results/BCICIV2b/csp_fractal/csp_fractal_classification_results.csv",
+            index=False,
+        )
+        print("CSV salvo: results/BCICIV2b/csp_fractal/")
     return results
 
 

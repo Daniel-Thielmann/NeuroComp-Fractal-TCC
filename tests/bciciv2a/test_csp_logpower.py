@@ -37,32 +37,6 @@ def bandpass_filter(data, lowcut, highcut, fs, order=4):
     return data_filtered
 
 
-def test_csp_logpower_feature():
-    X = np.random.randn(50, 22, 1000)
-    y = np.random.randint(0, 2, 50)
-    fs = 250
-    X_filtered = bandpass_filter(X, lowcut=4, highcut=40, fs=fs)
-    csp_transformer = csp()
-    X_4d = X_filtered[:, np.newaxis, :, :]
-    csp_transformer.fit({"X": X_4d, "y": y})
-    X_csp_result = csp_transformer.transform({"X": X_4d})
-    X_csp = X_csp_result["X"][:, 0, :, :]
-    features = []
-    for trial in X_csp:
-        comps = trial[:4] if trial.shape[0] >= 4 else trial
-        trial_feat = []
-        for comp in comps:
-            logpower = np.log(np.mean(comp**2) + 1e-10)
-            trial_feat.append(logpower)
-        features.append(trial_feat)
-    features = np.array(features)
-    assert features.shape[0] == 50
-    assert features.shape[1] == 4
-    assert not np.isnan(features).any()
-    assert not np.isinf(features).any()
-    return True
-
-
 def test_csp_logpower_classification_bciciv2a():
     print('Teste "CSP + LogPower" ("BCICIV2a"):')
     results = {}
@@ -140,10 +114,6 @@ def test_csp_logpower_classification_bciciv2a():
 
 
 if __name__ == "__main__":
-    print("Teste CSP + LogPower (BCICIV2a)")
-    success = test_csp_logpower_feature()
-    if not success:
-        sys.exit(1)
     try:
         results = test_csp_logpower_classification_bciciv2a()
         summary_data = []

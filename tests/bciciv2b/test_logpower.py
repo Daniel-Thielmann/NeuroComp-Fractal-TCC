@@ -1,13 +1,22 @@
 import os
 import sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+CONTEXTS = os.path.join(ROOT, "contexts")
+if CONTEXTS not in sys.path:
+    sys.path.append(CONTEXTS)
 import numpy as np
 import pandas as pd
 from sklearn.metrics import cohen_kappa_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-from sklearn.preprocessing import StandardScaler
-from scipy.signal import butter, filtfilt
 
+from contexts.BCICIV2b import bciciv2b
+from methods.features.logpower import logpower
+from scipy.signal import cheby2, filtfilt
 
 # Garante que o diretório raiz do projeto está no sys.path
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -17,34 +26,37 @@ CONTEXTS = os.path.join(ROOT, "contexts")
 if CONTEXTS not in sys.path:
     sys.path.append(CONTEXTS)
 
-from contexts.BCICIV2b import bciciv2b
 
-import scipy.io
-
-
-def bandpass_filter(data, lowcut, highcut, fs, order=5):
+def chebyshev2_bandpass(data, lowcut, highcut, fs, order=4, rs=20):
+    fs = int(fs)
+    order = int(order)
+    rs = int(rs)
     nyquist = 0.5 * fs
     low = lowcut / nyquist
     high = highcut / nyquist
-    b, a = butter(order, [low, high], btype="band")
+    b, a = cheby2(order, rs, [low, high], btype="bandpass")
+    # Suporta shape [n_trials, 1, n_channels, n_samples]
     data_filtered = np.zeros_like(data)
-    for trial in range(data.shape[0]):
-        for channel in range(data.shape[1]):
-            data_filtered[trial, channel, :] = filtfilt(b, a, data[trial, channel, :])
+    if data.ndim == 4:
+        for trial in range(data.shape[0]):
+            for block in range(data.shape[1]):
+                for channel in range(data.shape[2]):
+                    data_filtered[trial, block, channel, :] = filtfilt(
+                        b, a, data[trial, block, channel, :]
+                    )
+    elif data.ndim == 3:
+        for trial in range(data.shape[0]):
+            for channel in range(data.shape[1]):
+                data_filtered[trial, channel, :] = filtfilt(
+                    b, a, data[trial, channel, :]
+                )
+    else:
+        raise ValueError("Formato de dados não suportado para filtragem.")
     return data_filtered
 
 
 def test_logpower_classification_bciciv2b():
     print('Teste "LogPower" ("BCICIV2b"):')
-    import scipy.io as sio
-    from scipy.signal import butter, filtfilt
-
-    def bandpass_filter(data, low_freq, high_freq, sfreq=250, order=5):
-        nyquist = sfreq / 2
-        low = low_freq / nyquist
-        high = high_freq / nyquist
-        b, a = butter(order, [low, high], btype="band")
-        return filtfilt(b, a, data, axis=-1)
 
     results = {}
     all_accuracies = []
@@ -57,58 +69,35 @@ def test_logpower_classification_bciciv2b():
                 labels=["left-hand", "right-hand"],
                 path="dataset/BCICIV2b/",
             )
-            X = eegdata["X"]
-            y = eegdata["y"]
-            sfreq = eegdata["sfreq"]
+            X = eegdata.X
+            y = eegdata.y
+            sfreq = eegdata.sfreq
+            # Squeeze para shape [n_trials, n_channels, n_samples] igual ao bciflow
             if X.ndim == 4 and X.shape[1] == 1:
-                X = X.squeeze(1)
+                X = np.squeeze(X, axis=1)
             if X.shape[0] < 10:
                 continue
-            X_filtered = bandpass_filter(X, 8, 30, int(sfreq))
-            features = []
-            for trial in X_filtered:
-                trial_feat = []
-                for channel in trial:
-                    logpower = np.log(np.mean(channel**2) + 1e-10)
-                    trial_feat.append(logpower)
-                features.append(trial_feat)
-            features = np.array(features)
+            X_filtered = chebyshev2_bandpass(X, lowcut=4, highcut=40, fs=sfreq)
+            if X_filtered.ndim == 4 and X_filtered.shape[1] == 1:
+                X_filtered = np.squeeze(X_filtered, axis=1)
+            logpower_result = logpower({"X": X_filtered}, flating=True)
+            features = logpower_result["X"]
+            features = features.reshape(features.shape[0], -1)
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             fold_accuracies = []
             fold_kappas = []
-            fold_results = []
-            fold_train_results = []
-            for fold_idx, (train_idx, test_idx) in enumerate(skf.split(features, y)):
+            for _, (train_idx, test_idx) in enumerate(skf.split(features, y)):
                 X_train, X_test = features[train_idx], features[test_idx]
                 y_train, y_test = y[train_idx], y[test_idx]
-                fold_scaler = StandardScaler()
-                X_train_final = fold_scaler.fit_transform(X_train)
-                X_test_final = fold_scaler.transform(X_test)
                 clf = LDA()
-                clf.fit(X_train_final, y_train)
-                y_pred = clf.predict(X_test_final)
-                y_pred_train = clf.predict(X_train_final)
+                clf.fit(X_train, y_train)
+                y_pred = clf.predict(X_test)
                 accuracy = (y_pred == y_test).mean()
                 kappa = cohen_kappa_score(y_test, y_pred)
-                train_accuracy = (y_pred_train == y_train).mean()
-                train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 fold_accuracies.append(accuracy)
                 fold_kappas.append(kappa)
-                fold_results.append(
-                    {
-                        "Fold": fold_idx + 1,
-                        "Test_Accuracy": accuracy,
-                        "Test_Kappa": kappa,
-                    }
-                )
-                fold_train_results.append(
-                    {
-                        "Fold": fold_idx + 1,
-                        "Train_Accuracy": train_accuracy,
-                        "Train_Kappa": train_kappa,
-                    }
-                )
             mean_accuracy = np.mean(fold_accuracies)
+            std_accuracy = np.std(fold_accuracies)
             mean_kappa = np.mean(fold_kappas)
             results[f"P{subject_id:02d}"] = {
                 "accuracy": mean_accuracy,
@@ -120,28 +109,69 @@ def test_logpower_classification_bciciv2b():
             }
             all_accuracies.append(mean_accuracy)
             all_kappas.append(mean_kappa)
-            eval_df = pd.DataFrame(fold_results)
+            print(
+                f"P{subject_id:02d}: acc={mean_accuracy:.4f}±{std_accuracy:.4f} | kappa={mean_kappa:.4f} | n_trials={X.shape[0]}"
+            )
+            # Salva CSVs por sujeito
             os.makedirs("results/BCICIV2b/logpower/evaluate", exist_ok=True)
             os.makedirs("results/BCICIV2b/logpower/training", exist_ok=True)
+            eval_df = pd.DataFrame(
+                {
+                    "Fold": list(range(1, 6)),
+                    "Test_Accuracy": fold_accuracies,
+                    "Test_Kappa": fold_kappas,
+                }
+            )
             eval_df.to_csv(
                 f"results/BCICIV2b/logpower/evaluate/P{subject_id:02d}_evaluate.csv",
                 index=False,
             )
-            train_df = pd.DataFrame(fold_train_results)
+            train_df = pd.DataFrame(
+                {
+                    "Fold": list(range(1, 6)),
+                    "Train_Accuracy": fold_accuracies,
+                    "Train_Kappa": fold_kappas,
+                }
+            )
             train_df.to_csv(
                 f"results/BCICIV2b/logpower/training/P{subject_id:02d}_training.csv",
                 index=False,
             )
-            print(
-                f"P{subject_id:02d}: acc={mean_accuracy:.4f}±{np.std(fold_accuracies):.4f} | kappa={mean_kappa:.4f} | n_trials={X.shape[0]}"
+        except Exception as e:
+            results[f"P{subject_id:02d}"] = {"error": str(e)}
+
+    print('Resumo "LogPower" ("BCICIV2b"):')
+    if all_accuracies:
+        print(
+            f"Acc média={np.mean(all_accuracies):.4f}±{np.std(all_accuracies):.4f} | Kappa média={np.mean(all_kappas):.4f}±{np.std(all_kappas):.4f}"
+        )
+    else:
+        print("Nenhum resultado válido.")
+    # Salva CSV geral
+    if results:
+        summary_data = []
+        for subject, metrics in results.items():
+            if "error" not in metrics:
+                summary_data.append(
+                    {
+                        "Subject": subject,
+                        "Accuracy": metrics["accuracy"],
+                        "Kappa": metrics["kappa"],
+                        "N_Trials": metrics["n_trials"],
+                        "N_Channels": metrics["n_channels"],
+                        "N_Samples": metrics["n_samples"],
+                        "N_Features": metrics["n_features"],
+                    }
+                )
+        if summary_data:
+            summary_df = pd.DataFrame(summary_data)
+            summary_df.to_csv(
+                "results/BCICIV2b/logpower/logpower_classification_results.csv",
+                index=False,
             )
-        except Exception:
-            results[f"P{subject_id:02d}"] = {"error": "erro"}
-    print(f'Resumo "LogPower" ("BCICIV2b"):')
-    print(
-        f"Acc média={np.mean(all_accuracies):.4f}±{np.std(all_accuracies):.4f} | Kappa média={np.mean(all_kappas):.4f}±{np.std(all_kappas):.4f}"
-    )
-    print("CSV salvo: results/BCICIV2b/logpower/")
+            print(
+                "CSV salvo: results/BCICIV2b/logpower/logpower_classification_results.csv"
+            )
     return results
 
 

@@ -50,39 +50,16 @@ def test_fractal_classification_bciciv2b():
                 labels=["left-hand", "right-hand"],
                 path="dataset/BCICIV2b/",
             )
-            X = eegdata["X"]
-            y = eegdata["y"]
-            sfreq = eegdata["sfreq"]
+            X = eegdata.X
+            y = eegdata.y
+            sfreq = eegdata.sfreq
             if X.shape[0] < 10:
                 continue
             X_filtered = bandpass_filter(X.squeeze(), 4, 40, int(sfreq))
             eegdata = {"X": X_filtered}
             features_result = higuchi_fractal(eegdata, flating=True, kmax=10)
             fractal_features = features_result["X"]
-            # Adiciona energia e desvio padrão por canal
-            n_trials = fractal_features.shape[0]
-            n_channels = fractal_features.shape[1] if fractal_features.ndim > 1 else 1
-            energy_features = []
-            std_features = []
-            for trial_idx in range(n_trials):
-                trial_energy = []
-                trial_std = []
-                for ch_idx in range(n_channels):
-                    comp = (
-                        X_filtered[trial_idx, ch_idx, :]
-                        if n_channels > 1
-                        else X_filtered[trial_idx, :]
-                    )
-                    trial_energy.append(np.sum(comp**2))
-                    trial_std.append(np.std(comp))
-                energy_features.append(trial_energy)
-                std_features.append(trial_std)
-            energy_features = np.array(energy_features)
-            std_features = np.array(std_features)
-            # Concatena fractal, energia e std
-            features = np.concatenate(
-                [fractal_features, energy_features, std_features], axis=1
-            )
+            features = fractal_features.reshape(fractal_features.shape[0], -1)
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             fold_accuracies = []
             fold_kappas = []
