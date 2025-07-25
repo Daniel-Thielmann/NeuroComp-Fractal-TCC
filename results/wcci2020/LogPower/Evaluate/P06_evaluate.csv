@@ -1,6 +1,2 @@
-Fold,Test_Accuracy,Test_Kappa
-1,0.75,0.5
-2,0.9375,0.875
-3,0.75,0.5
-4,0.8125,0.625
-5,0.8125,0.625
+Subject,Accuracy,Kappa,N_Samples
+P06,0.8125,0.625,4096

@@ -1,6 +1,2 @@
-Fold,Train_Accuracy,Train_Kappa
-1,0.84375,0.6875
-2,0.8125,0.625
-3,0.78125,0.5625
-4,0.875,0.75
-5,0.875,0.75
+Subject,Accuracy,Kappa,N_Samples
+P05,,,4096
