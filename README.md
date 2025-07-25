@@ -1,142 +1,101 @@
-# 🧠 TCC - Análise de EEG com Dimensão Fractal de Higuchi e LogPower
+# TCC - Análise de EEG com Pipelines Fractal, LogPower, CSP e FBCSP
 
-Este projeto realiza uma análise computacional detalhada de sinais EEG durante tarefas de imaginação motora, utilizando dois métodos distintos de extração de características: **Dimensão Fractal de Higuchi** e **Potência Logarítmica (LogPower)**. O objetivo é avaliar comparativamente o desempenho desses métodos na discriminação entre atividades mentais de movimento da mão esquerda e da mão direita, aplicando classificadores LDA e validação estatística.
-
----
-
-## 🎯 Objetivos
-
-- Explorar a **Dimensão Fractal de Higuchi (HFD)** como ferramenta de extração de características para EEG.
-- Comparar seu desempenho com o método tradicional de **LogPower**.
-- Classificar os sinais utilizando **LDA** com validação cruzada.
-- Aplicar o **teste de Wilcoxon** para avaliar diferenças estatísticas significativas entre os métodos.
-- Visualizar os resultados com gráficos analíticos.
+Este projeto realiza uma análise rigorosa de sinais EEG em tarefas de imaginação motora, utilizando múltiplos pipelines de extração de características e classificação, conforme padrões científicos e instruções do orientador.
 
 ---
 
-## 📁 Estrutura do Projeto
+## Objetivos
+
+- Implementar e comparar os seguintes pipelines:
+  - Fractal
+  - LogPower
+  - CSP + Fractal
+  - CSP + LogPower
+  - FBCSP + Fractal
+  - FBCSP + LogPower
+- Separar e salvar resultados por sujeito e por método, conforme padrão científico.
+- Calcular estatísticas descritivas e realizar teste de Wilcoxon para comparação entre métodos.
+- Garantir rigor científico e reprodutibilidade dos resultados.
+
+---
+
+## Estrutura do Projeto
 
 ```
 EEG-TCC/
-├── dataset/                      # Arquivos .mat dos sujeitos (parsed_P01T.mat etc.)
-├── results/                      # Saídas dos classificadores
-│   ├── Higuchi/
-│   │   ├── Training/
-│   │   └── Evaluate/
-│   ├── LogPower/
-│   │   ├── Training/
-│   │   └── Evaluate/
-│   └── higuchi_vs_logpower_comparison.csv
+├── dataset/                # Dados brutos (.mat) dos sujeitos
+│   ├── BCICIV2a/
+│   ├── BCICIV2b/
+│   └── wcci2020/
+├── results/
+│   ├── bciciv2a/
+│   ├── bciciv2b/
+│   ├── wcci2020/
+│   │   └── <metodo>/
+│   │       ├── evaluate/   # CSVs por sujeito (teste)
+│   │       └── training/   # CSVs por sujeito (treino)
+│   └── <metodo>_classification_results.csv # CSV geral do método
 ├── graphics/
-│   ├── scripts/                  # Scripts para geração dos gráficos
-│   └── results/                  # Gráficos salvos (.png)
+│   ├── scripts/
+│   └── results/
 ├── methods/
-│   ├── higuchi.py                # Implementação do método Higuchi
-│   └── logpower.py               # Implementação do método LogPower
-├── main.py                       # Script principal que executa o pipeline completo
+│   ├── features/
+│   └── pipelines/
+├── modules/
+├── main.py                 # Script principal
 └── README.md
 ```
 
 ---
 
-## 📦 Dataset: WCCI 2020
+## Datasets Utilizados
 
-Este projeto utiliza os dados do desafio **WCCI 2020**. O conjunto de dados contém sinais EEG registrados durante a realização de tarefas de imaginação motora (mão esquerda ou direita).
-
-- **Formato dos arquivos**: `.mat`
-- **Tarefas**: Imaginação de movimento da mão esquerda (classe 1) e direita (classe 2)
-- **Canais**: 22 canais EEG
-- **Duração das trials**: ~4 segundos
+- **WCCI2020 (CBCIC):** 9 sujeitos, 80 trials/sujeito, 12 canais, 4096 amostras, 512Hz
+- **BCICIV2a:** 9 sujeitos, 288 trials/sujeito, 22 canais, 1000 amostras, 100Hz
+- **BCICIV2b:** 9 sujeitos, 288 trials/sujeito, 22 canais, 1000 amostras, 100Hz
 
 ---
 
-## 🧪 Pipeline de Execução
+## Pipelines Implementados
 
-O pipeline executado pela `main.py` realiza as seguintes etapas:
+Todos os pipelines seguem rigorosamente as instruções:
 
-1. **Leitura dos arquivos `.mat` para cada sujeito**
-2. **Extração de características** com:
-   - `HiguchiFractalEvolution` (DF)
-   - `LogPowerEnhanced` (Potência Log)
-3. **Treinamento e avaliação via validação cruzada 5-fold**
-4. **Classificação com LDA (Linear Discriminant Analysis)**
-5. **Geração de 40 arquivos CSV (Training + Evaluate)** com probabilidades
-6. **Construção do CSV final comparando Higuchi vs LogPower**
-7. **Cálculo das estatísticas descritivas**
-8. **Teste de Wilcoxon para comparação estatística**
-9. **Geração de 8 gráficos explicativos**
+- Filtro Chebyshev II 4-40Hz (ou bancos de filtros para FBCSP)
+- Extração de características (HFD, LogPower)
+- CSP e FBCSP quando especificado
+- Seleção de características MIBIF (apenas FBCSP)
+- Classificação com LDA
+- Validação cruzada StratifiedKFold (5-fold, random_state=42)
+- Sem normalização fora dos pipelines permitidos
 
 ---
 
-## 🖼 Gráficos Gerados
+## Resultados
 
-Local: `graphics/results/`
-
-- `boxplot_higuchi_vs_logpower.png`
-- `histogram_higuchi_vs_logpower.png`
-- `accuracy_per_subject.png`
-- `scatter_higuchi_vs_logpower.png`
-- `wilcoxon_pvalue_plot.png`
-- `heatmap_subject_vs_method.png`
-- `roc_curve_comparison.png`
-- `violinplot_higuchi_vs_logpower.png`
-- `confusion_matrix_comparison.png`
-
-> Todos os gráficos são gerados automaticamente pelo script `graphics/scripts/generate_all_graphs.py`.
-
----
-
-## ▶️ Como Executar
-
-### 1. Instale as dependências
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Execute o pipeline completo
-
-```bash
-python main.py
-```
-
-### 3. Gere todos os gráficos
-
-```bash
-python graphics/scripts/generate_all_graphs.py
-```
-
----
-
-## 📊 Resultados Estatísticos
-
-Após a execução, o teste de Wilcoxon aponta se a diferença entre os métodos é estatisticamente significativa.
-
-**Exemplo de saída**:
-
-```
-=== Wilcoxon Test (40 CSVs combinados) ===
-Statistic: 588424.0000
-P-value : 0.0063
-Conclusão: Diferença significativa entre os métodos
-```
-
-Isso confirma que **Higuchi superou o LogPower** na análise de imaginação motora com EEG.
+- Resultados separados por dataset, método e sujeito
+- 1 CSV por sujeito em evaluate e training, 1 CSV geral por método
+- Estrutura: `results/<dataset>/<metodo>/evaluate/Pxx_evaluate.csv`, `results/<dataset>/<metodo>/training/Pxx_training.csv`, `results/<dataset>/<metodo>_classification_results.csv`
+- Prints padronizados no terminal conforme instruções
+- Teste de Wilcoxon e cálculo de kappa para comparação entre métodos
 
 ---
 
 ## Autor
 
-**Daniel Thielmann**
-Curso de Engenharia Computacional  
+Daniel Thielmann
+Curso de Engenharia Computacional
 Universidade Federal de Juiz de Fora (UFJF)
 
 ---
 
 ## Orientador
 
-**Gabriel Souza**
-Departamento de Ciência da Computação (UFJF)  
+Gabriel Souza
+Departamento de Ciência da Computação (UFJF)
 Universidade Federal de Juiz de Fora (UFJF)
 
 ---
+
+## Resultados Estatísticos
+
+Após a execução dos pipelines, são calculados os valores de kappa e realizado o teste de Wilcoxon para cada dataset e par de métodos, permitindo identificar se as diferenças de desempenho entre os métodos são estatisticamente significativas e cientificamente relevantes.
