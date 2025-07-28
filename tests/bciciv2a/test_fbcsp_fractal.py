@@ -106,7 +106,9 @@ def test_fbcsp_fractal_classification_bciciv2a():
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             fold_accuracies = []
             fold_kappas = []
-            for _, (train_idx, test_idx) in enumerate(skf.split(features, y)):
+            fold_results = []
+            fold_train_results = []
+            for fold_idx, (train_idx, test_idx) in enumerate(skf.split(features, y)):
                 X_train, X_test = features[train_idx], features[test_idx]
                 y_train, y_test = y[train_idx], y[test_idx]
                 mibif = SelectKBest(
@@ -117,10 +119,58 @@ def test_fbcsp_fractal_classification_bciciv2a():
                 clf = LDA()
                 clf.fit(X_train_selected, y_train)
                 y_pred = clf.predict(X_test_selected)
+                y_pred_train = clf.predict(X_train_selected)
                 accuracy = (y_pred == y_test).mean()
                 kappa = cohen_kappa_score(y_test, y_pred)
+                train_accuracy = (y_pred_train == y_train).mean()
+                train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 fold_accuracies.append(accuracy)
                 fold_kappas.append(kappa)
+                fold_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Accuracy": accuracy,
+                        "Kappa": kappa,
+                        "N_Samples": len(y_test),
+                    }
+                )
+                fold_train_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
+                    }
+                )
+            mean_accuracy = np.mean(fold_accuracies)
+            std_accuracy = np.std(fold_accuracies)
+            mean_kappa = np.mean(fold_kappas)
+            results[f"P{subject_id:02d}"] = {
+                "accuracy": mean_accuracy,
+                "kappa": mean_kappa,
+                "n_trials": X.shape[0],
+                "n_channels": X.shape[1],
+                "n_samples": X.shape[2],
+                "n_features": features.shape[1],
+            }
+            all_accuracies.append(mean_accuracy)
+            all_kappas.append(mean_kappa)
+            print(
+                f"P{subject_id:02d}: acc={mean_accuracy:.4f}±{std_accuracy:.4f} | kappa={mean_kappa:.4f} | n_trials={X.shape[0]}"
+            )
+            # Salva CSVs por sujeito no padrão WCCI2020
+            os.makedirs("results/BCICIV2a/fbcsp_fractal/evaluate", exist_ok=True)
+            os.makedirs("results/BCICIV2a/fbcsp_fractal/training", exist_ok=True)
+            eval_df = pd.DataFrame(fold_results)
+            eval_df.to_csv(
+                f"results/BCICIV2a/fbcsp_fractal/evaluate/P{subject_id:02d}_evaluate.csv",
+                index=False,
+            )
+            train_df = pd.DataFrame(fold_train_results)
+            train_df.to_csv(
+                f"results/BCICIV2a/fbcsp_fractal/training/P{subject_id:02d}_training.csv",
+                index=False,
+            )
             mean_accuracy = np.mean(fold_accuracies)
             std_accuracy = np.std(fold_accuracies)
             mean_kappa = np.mean(fold_kappas)
@@ -139,7 +189,7 @@ def test_fbcsp_fractal_classification_bciciv2a():
             )
         except Exception as e:
             results[f"P{subject_id:02d}"] = {"error": str(e)}
-    print("Resumo FBCSP Fractal BCICIV2a:")
+    print('Resumo "FBCSP + Fractal" ("BCICIV2a"):')
     if all_accuracies:
         print(
             f"Acc média={np.mean(all_accuracies):.4f}±{np.std(all_accuracies):.4f} | Kappa média={np.mean(all_kappas):.4f}±{np.std(all_kappas):.4f}"

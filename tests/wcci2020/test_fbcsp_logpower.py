@@ -92,6 +92,8 @@ def test_fbcsp_logpower_pipeline():
                 continue
             cv_accuracies = []
             cv_kappas = []
+            fold_results = []
+            fold_train_results = []
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             for fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
                 X_train, X_test = X[train_idx], X[test_idx]
@@ -111,10 +113,29 @@ def test_fbcsp_logpower_pipeline():
                 clf = LDA()
                 clf.fit(features_train_final, y_train)
                 y_pred = clf.predict(features_test_final)
+                y_pred_train = clf.predict(features_train_final)
                 fold_accuracy = (y_test == y_pred).mean()
                 fold_kappa = cohen_kappa_score(y_test, y_pred)
+                train_accuracy = (y_train == y_pred_train).mean()
+                train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 cv_accuracies.append(fold_accuracy)
                 cv_kappas.append(fold_kappa)
+                fold_results.append(
+                    {
+                        "Fold": fold + 1,
+                        "Accuracy": fold_accuracy,
+                        "Kappa": fold_kappa,
+                        "N_Samples": len(y_test),
+                    }
+                )
+                fold_train_results.append(
+                    {
+                        "Fold": fold + 1,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
+                    }
+                )
             accuracy = np.mean(cv_accuracies)
             kappa = np.mean(cv_kappas)
             results[f"P{subject_id:02d}"] = {
@@ -129,15 +150,15 @@ def test_fbcsp_logpower_pipeline():
             all_accuracies.append(accuracy)
             all_kappas.append(kappa)
             os.makedirs("results/wcci2020/fbcsp_logpower/Evaluate", exist_ok=True)
-            eval_df = pd.DataFrame(
-                {
-                    "Fold": list(range(1, 6)),
-                    "Test_Accuracy": cv_accuracies,
-                    "Test_Kappa": cv_kappas,
-                }
-            )
+            os.makedirs("results/wcci2020/fbcsp_logpower/Training", exist_ok=True)
+            eval_df = pd.DataFrame(fold_results)
             eval_df.to_csv(
                 f"results/wcci2020/fbcsp_logpower/Evaluate/P{subject_id:02d}_evaluate.csv",
+                index=False,
+            )
+            train_df = pd.DataFrame(fold_train_results)
+            train_df.to_csv(
+                f"results/wcci2020/fbcsp_logpower/Training/P{subject_id:02d}_training.csv",
                 index=False,
             )
             print(

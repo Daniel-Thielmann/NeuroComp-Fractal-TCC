@@ -87,15 +87,17 @@ def test_logpower_classification_bciciv2a():
                 fold_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Test_Accuracy": accuracy,
-                        "Test_Kappa": kappa,
+                        "Accuracy": accuracy,
+                        "Kappa": kappa,
+                        "N_Samples": len(y_test),
                     }
                 )
                 fold_train_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Train_Accuracy": train_accuracy,
-                        "Train_Kappa": train_kappa,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
                     }
                 )
             mean_accuracy = np.mean(fold_accuracies)
@@ -112,11 +114,13 @@ def test_logpower_classification_bciciv2a():
             all_accuracies.append(mean_accuracy)
             all_kappas.append(mean_kappa)
             eval_df = pd.DataFrame(fold_results)
+            train_df = pd.DataFrame(fold_train_results)
+            os.makedirs("results/BCICIV2a/logpower/evaluate", exist_ok=True)
+            os.makedirs("results/BCICIV2a/logpower/training", exist_ok=True)
             eval_df.to_csv(
                 f"results/BCICIV2a/logpower/evaluate/P{subject_id:02d}_evaluate.csv",
                 index=False,
             )
-            train_df = pd.DataFrame(fold_train_results)
             train_df.to_csv(
                 f"results/BCICIV2a/logpower/training/P{subject_id:02d}_training.csv",
                 index=False,

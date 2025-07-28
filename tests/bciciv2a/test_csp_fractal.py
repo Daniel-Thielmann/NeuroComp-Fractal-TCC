@@ -98,17 +98,48 @@ def test_csp_fractal_classification_bciciv2a():
                 fold_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Test_Accuracy": accuracy,
-                        "Test_Kappa": kappa,
+                        "Accuracy": accuracy,
+                        "Kappa": kappa,
+                        "N_Samples": len(y_test),
                     }
                 )
                 fold_train_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Train_Accuracy": train_accuracy,
-                        "Train_Kappa": train_kappa,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
                     }
                 )
+            mean_accuracy = np.mean(fold_accuracies)
+            std_accuracy = np.std(fold_accuracies)
+            mean_kappa = np.mean(fold_kappas)
+            results[f"P{subject_id:02d}"] = {
+                "accuracy": mean_accuracy,
+                "kappa": mean_kappa,
+                "n_trials": X.shape[0],
+                "n_channels": X.shape[1],
+                "n_samples": X.shape[2],
+                "n_features": features.shape[1],
+            }
+            all_accuracies.append(mean_accuracy)
+            all_kappas.append(mean_kappa)
+            print(
+                f"P{subject_id:02d}: acc={mean_accuracy:.4f}±{std_accuracy:.4f} | kappa={mean_kappa:.4f} | n_trials={X.shape[0]}"
+            )
+            # Salva CSVs por sujeito no padrão WCCI2020
+            os.makedirs("results/BCICIV2a/csp_fractal/evaluate", exist_ok=True)
+            os.makedirs("results/BCICIV2a/csp_fractal/training", exist_ok=True)
+            eval_df = pd.DataFrame(fold_results)
+            eval_df.to_csv(
+                f"results/BCICIV2a/csp_fractal/evaluate/P{subject_id:02d}_evaluate.csv",
+                index=False,
+            )
+            train_df = pd.DataFrame(fold_train_results)
+            train_df.to_csv(
+                f"results/BCICIV2a/csp_fractal/training/P{subject_id:02d}_training.csv",
+                index=False,
+            )
             mean_accuracy = np.mean(fold_accuracies)
             std_accuracy = np.std(fold_accuracies)
             mean_kappa = np.mean(fold_kappas)

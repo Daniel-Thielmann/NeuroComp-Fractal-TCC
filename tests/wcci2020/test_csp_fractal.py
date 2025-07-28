@@ -123,15 +123,17 @@ def test_csp_fractal_classification_wcci2020():
                 fold_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Test_Accuracy": accuracy,
-                        "Test_Kappa": kappa,
+                        "Accuracy": accuracy,
+                        "Kappa": kappa,
+                        "N_Samples": len(y_test),
                     }
                 )
                 fold_train_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Train_Accuracy": train_accuracy,
-                        "Train_Kappa": train_kappa,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
                     }
                 )
             mean_accuracy = np.mean(fold_accuracies)

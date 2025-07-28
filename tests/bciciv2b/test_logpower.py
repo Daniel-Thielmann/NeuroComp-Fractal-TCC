@@ -86,16 +86,37 @@ def test_logpower_classification_bciciv2b():
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             fold_accuracies = []
             fold_kappas = []
-            for _, (train_idx, test_idx) in enumerate(skf.split(features, y)):
+            fold_results = []
+            fold_train_results = []
+            for fold_idx, (train_idx, test_idx) in enumerate(skf.split(features, y)):
                 X_train, X_test = features[train_idx], features[test_idx]
                 y_train, y_test = y[train_idx], y[test_idx]
                 clf = LDA()
                 clf.fit(X_train, y_train)
                 y_pred = clf.predict(X_test)
+                y_pred_train = clf.predict(X_train)
                 accuracy = (y_pred == y_test).mean()
                 kappa = cohen_kappa_score(y_test, y_pred)
+                train_accuracy = (y_pred_train == y_train).mean()
+                train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 fold_accuracies.append(accuracy)
                 fold_kappas.append(kappa)
+                fold_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Accuracy": accuracy,
+                        "Kappa": kappa,
+                        "N_Samples": len(y_test),
+                    }
+                )
+                fold_train_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
+                    }
+                )
             mean_accuracy = np.mean(fold_accuracies)
             std_accuracy = np.std(fold_accuracies)
             mean_kappa = np.mean(fold_kappas)
@@ -112,27 +133,15 @@ def test_logpower_classification_bciciv2b():
             print(
                 f"P{subject_id:02d}: acc={mean_accuracy:.4f}±{std_accuracy:.4f} | kappa={mean_kappa:.4f} | n_trials={X.shape[0]}"
             )
-            # Salva CSVs por sujeito
+            # Salva CSVs por sujeito no padrão WCCI2020
             os.makedirs("results/BCICIV2b/logpower/evaluate", exist_ok=True)
             os.makedirs("results/BCICIV2b/logpower/training", exist_ok=True)
-            eval_df = pd.DataFrame(
-                {
-                    "Fold": list(range(1, 6)),
-                    "Test_Accuracy": fold_accuracies,
-                    "Test_Kappa": fold_kappas,
-                }
-            )
+            eval_df = pd.DataFrame(fold_results)
             eval_df.to_csv(
                 f"results/BCICIV2b/logpower/evaluate/P{subject_id:02d}_evaluate.csv",
                 index=False,
             )
-            train_df = pd.DataFrame(
-                {
-                    "Fold": list(range(1, 6)),
-                    "Train_Accuracy": fold_accuracies,
-                    "Train_Kappa": fold_kappas,
-                }
-            )
+            train_df = pd.DataFrame(fold_train_results)
             train_df.to_csv(
                 f"results/BCICIV2b/logpower/training/P{subject_id:02d}_training.csv",
                 index=False,

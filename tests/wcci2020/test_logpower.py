@@ -83,18 +83,22 @@ def test_logpower_classification_wcci2020():
                 train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 fold_accuracies.append(accuracy)
                 fold_kappas.append(kappa)
+                # Salva cada fold como uma linha no CSV de evaluate
                 fold_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Test_Accuracy": accuracy,
-                        "Test_Kappa": kappa,
+                        "Accuracy": accuracy,
+                        "Kappa": kappa,
+                        "N_Samples": len(y_test),
                     }
                 )
+                # Salva cada fold como uma linha no CSV de training
                 fold_train_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Train_Accuracy": train_accuracy,
-                        "Train_Kappa": train_kappa,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
                     }
                 )
             mean_accuracy = np.mean(fold_accuracies)

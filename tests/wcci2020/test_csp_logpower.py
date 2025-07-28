@@ -79,8 +79,6 @@ def test_csp_logpower_pipeline():
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             fold_accuracies = []
             fold_kappas = []
-            fold_train_accuracies = []
-            fold_train_kappas = []
             fold_results = []
             fold_train_results = []
             for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X_filtered, y)):
@@ -98,31 +96,27 @@ def test_csp_logpower_pipeline():
                 train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 fold_accuracies.append(accuracy)
                 fold_kappas.append(kappa)
-                fold_train_accuracies.append(train_accuracy)
-                fold_train_kappas.append(train_kappa)
                 fold_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Test_Accuracy": accuracy,
-                        "Test_Kappa": kappa,
+                        "Accuracy": accuracy,
+                        "Kappa": kappa,
+                        "N_Samples": len(y_test),
                     }
                 )
                 fold_train_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Train_Accuracy": train_accuracy,
-                        "Train_Kappa": train_kappa,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
                     }
                 )
             mean_accuracy = np.mean(fold_accuracies)
             mean_kappa = np.mean(fold_kappas)
-            mean_train_accuracy = np.mean(fold_train_accuracies)
-            mean_train_kappa = np.mean(fold_train_kappas)
             results[f"P{subject_id:02d}"] = {
                 "accuracy": mean_accuracy,
                 "kappa": mean_kappa,
-                "train_accuracy": mean_train_accuracy,
-                "train_kappa": mean_train_kappa,
                 "n_samples": X.shape[0],
                 "cv_accuracies": fold_accuracies,
                 "cv_kappas": fold_kappas,
@@ -174,8 +168,8 @@ if __name__ == "__main__":
                     "Subject": subject,
                     "Accuracy": metrics["accuracy"],
                     "Kappa": metrics["kappa"],
-                    "Train_Accuracy": metrics.get("train_accuracy", None),
-                    "Train_Kappa": metrics.get("train_kappa", None),
+                    # "Train_Accuracy": metrics.get("train_accuracy", None),
+                    # "Train_Kappa": metrics.get("train_kappa", None),
                     "N_Samples": metrics["n_samples"],
                 }
             )

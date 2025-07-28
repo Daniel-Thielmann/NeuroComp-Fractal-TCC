@@ -149,6 +149,7 @@ def test_fbcsp_fractal_classification_wcci2020():
             fold_accuracies = []
             fold_kappas = []
             fold_results = []
+            fold_train_results = []
             for fold_idx, (train_idx, test_idx) in enumerate(
                 skf.split(selected_features, y)
             ):
@@ -160,15 +161,27 @@ def test_fbcsp_fractal_classification_wcci2020():
                 clf = LDA()
                 clf.fit(X_train, y_train)
                 y_pred = clf.predict(X_test)
+                y_pred_train = clf.predict(X_train)
                 accuracy = (y_pred == y_test).mean()
                 kappa = cohen_kappa_score(y_test, y_pred)
+                train_accuracy = (y_pred_train == y_train).mean()
+                train_kappa = cohen_kappa_score(y_train, y_pred_train)
                 fold_accuracies.append(accuracy)
                 fold_kappas.append(kappa)
                 fold_results.append(
                     {
                         "Fold": fold_idx + 1,
-                        "Test_Accuracy": accuracy,
-                        "Test_Kappa": kappa,
+                        "Accuracy": accuracy,
+                        "Kappa": kappa,
+                        "N_Samples": len(y_test),
+                    }
+                )
+                fold_train_results.append(
+                    {
+                        "Fold": fold_idx + 1,
+                        "Accuracy": train_accuracy,
+                        "Kappa": train_kappa,
+                        "N_Samples": len(y_train),
                     }
                 )
             mean_accuracy = np.mean(fold_accuracies)
@@ -183,9 +196,15 @@ def test_fbcsp_fractal_classification_wcci2020():
             all_accuracies.append(mean_accuracy)
             all_kappas.append(mean_kappa)
             os.makedirs("results/wcci2020/fbcsp_fractal/Evaluate", exist_ok=True)
+            os.makedirs("results/wcci2020/fbcsp_fractal/Training", exist_ok=True)
             eval_df = pd.DataFrame(fold_results)
             eval_df.to_csv(
                 f"results/wcci2020/fbcsp_fractal/Evaluate/P{subject_id:02d}_evaluate.csv",
+                index=False,
+            )
+            train_df = pd.DataFrame(fold_train_results)
+            train_df.to_csv(
+                f"results/wcci2020/fbcsp_fractal/Training/P{subject_id:02d}_training.csv",
                 index=False,
             )
             print(

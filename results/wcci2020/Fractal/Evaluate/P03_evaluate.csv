@@ -1,2 +1,6 @@
-Subject,Accuracy,Kappa,N_Samples
-P03,0.525,0.05,4096
+Fold,Accuracy,Kappa,N_Samples
+1,0.5625,0.125,16
+2,0.5,0.0,16
+3,0.625,0.25,16
+4,0.5625,0.125,16
+5,0.375,-0.25,16
